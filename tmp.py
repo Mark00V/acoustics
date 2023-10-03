@@ -1,23 +1,32 @@
 import numpy as np
 
-# Define the coordinates of the rectangle
-x_min, x_max = 1.0, 5.0  # Minimum and maximum x-coordinates
-y_min, y_max = 2.0, 6.0  # Minimum and maximum y-coordinates
 
-# Specify the number of points along the x and y axes
-num_x_points = 10  # Number of points along the x-axis
-num_y_points = 5   # Number of points along the y-axis
+def is_point_on_line(point, line_start, line_end, tolerance=1e-6):
+    # Calculate vectors from line_start to point and from line_start to line_end
+    point_vector = np.array(point) - np.array(line_start)
+    line_vector = np.array(line_end) - np.array(line_start)
 
-# Generate a grid of points
-x_points = np.linspace(x_min, x_max, num_x_points)
-y_points = np.linspace(y_min, y_max, num_y_points)
+    # Calculate the cross product of the two vectors
+    cross_product = np.cross(line_vector, point_vector)
 
-# Create a meshgrid of x and y points
-x_grid, y_grid = np.meshgrid(x_points, y_points)
+    # Calculate the length of the cross product
+    cross_product_length = np.linalg.norm(cross_product)
 
-# Stack the x and y coordinates to get the final array of points
-points = np.column_stack((x_grid.ravel(), y_grid.ravel()))
+    # Check if the length of the cross product is within the specified tolerance
+    return abs(cross_product_length) < tolerance
 
-# Print the generated points
-print("Generated points:")
-print(points)
+
+# Define the points that make up the line
+line_start = (1, 1)
+line_end = (4, 4)
+
+# Specify the point you want to check
+point_to_check = (2, 2)
+
+# Check if the point is on the line
+is_on_line = is_point_on_line(point_to_check, line_start, line_end)
+
+if is_on_line:
+    print("The point is on the line.")
+else:
+    print("The point is not on the line.")

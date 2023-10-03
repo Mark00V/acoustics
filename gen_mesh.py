@@ -5,7 +5,7 @@ from scipy.spatial import Delaunay
 import math
 import random
 import time
-
+from scipy.spatial import ConvexHull
 
 def check_vertice(point: np.array, polygon: np.array) -> bool:
     """
@@ -72,6 +72,7 @@ def create_polygon_outline_vertices(polygon: np.array, density: float) -> np.arr
 
     return outline_vertices
 
+
 def get_min_max_values(polygon: np.array) -> np.array:
     """
     Returns the min and max x,y values for a polygon (outline positions for rectangle)
@@ -96,7 +97,7 @@ def get_seed_rectangle(rect: np.array, density: float, method='uniform') -> np.a
     between points
     :param rect: np.array([[min_x, min_y], [max_x, max_y]])
     :param density: float, specifies distance between 2 points
-    :param method: 'random' for random generation, 'uniform' for equal distance
+    :param method: 'random' for random generation, 'uniform' for equal distance or 'randomuniform' for approx uniform
     :return: np.array([[x0, y0], [x1, y1], ... ])
     """
     if np.any(rect < 0.0):
@@ -104,6 +105,7 @@ def get_seed_rectangle(rect: np.array, density: float, method='uniform') -> np.a
     if not np.array_equal(rect[0], np.array([0, 0])):
         raise ValueError(f"Starting vortex has to be [0, 0]")
 
+    # randomness, should be close to 1.0
     rd = 0.975
     ru = 1.025
 
@@ -133,6 +135,38 @@ def get_seed_rectangle(rect: np.array, density: float, method='uniform') -> np.a
 
     return rect_seed_points
 
+
+def check_vertice_outline(point: np.array, polygon: np.array, tolerance=1e-6) -> bool:
+    """
+    Checks if a point is on outline of polyon
+    :param point: np.array([x_coord0, y_coord0])
+    :param polygon: np.array([
+                        [x_coord0, y_coord0],
+                        [x_coord1, y_coord1],
+                        [x_coord2, y_coord2],
+                        ...,
+                        [x_coord0, y_coord0]]) # Last vertice has to be first vertice!
+    :param tolerance: tolerance for check proximity
+    :return: bool
+    """
+
+    point_on_line = False
+    for nv, start_point in enumerate(polygon[:-1]):
+        end_point = polygon[nv+1]
+        point_vector = np.array(point) - np.array(start_point)
+        line_vector = np.array(end_point) - np.array(start_point)
+        cross_product = np.cross(line_vector, point_vector)
+        cross_product_length = np.linalg.norm(cross_product)
+        is_out_of_line_rect = False
+        if (point[0] < start_point[0] or point[0] > end_point[0]) and (point[1] < start_point[1] or point[1] > end_point[0]):
+            is_out_of_line_rect = True
+        if abs(cross_product_length) < tolerance and not is_out_of_line_rect:
+            point_on_line = True
+            break
+
+    return point_on_line
+
+
 def get_seed_polygon(polygon: np.array, density: float, method='uniform'):
     """
     Creates points inside polygon and on polygon outline
@@ -151,7 +185,8 @@ def get_seed_polygon(polygon: np.array, density: float, method='uniform'):
     keep_points = []
     for idn, point in enumerate(rect_seed_points):
         if check_vertice(point, polygon):
-            keep_points.append(idn)
+            if not check_vertice_outline(point, polygon, tolerance=density/2):
+                keep_points.append(idn)
     filtered_seed_points = rect_seed_points[keep_points]
     polygon_outline_vertices = create_polygon_outline_vertices(polygon, density)
     all_points = np.append(filtered_seed_points, polygon_outline_vertices, axis=0)
@@ -160,6 +195,13 @@ def get_seed_polygon(polygon: np.array, density: float, method='uniform'):
 
 
 def show_mesh(all_points, polygon_outline_vertices, triangles):
+    """
+    todo
+    :param all_points:
+    :param polygon_outline_vertices:
+    :param triangles:
+    :return:
+    """
 
     plt.scatter(polygon_outline_vertices[:, 0], polygon_outline_vertices[:, 1], c='b', marker='o', label='Boundary Points')
     plt.scatter(all_points[:, 0], all_points[:, 1], c='b', marker='.', label='Seed Points')
@@ -171,12 +213,19 @@ def show_mesh(all_points, polygon_outline_vertices, triangles):
     plt.title('Mesh generation in Polygon')
     plt.show()
 
+
 def create_mesh(polygon: np.array, density: float, method='uniform'):
+    """
+    todo:
+    :param polygon:
+    :param density:
+    :param method:
+    :return:
+    """
     all_points = get_seed_polygon(polygon, density, method=method)
 
     # remove duplicates
     all_points = np.unique(all_points, axis=0)
-
 
     polygon_outline_vertices = create_polygon_outline_vertices(polygon, density)
 
@@ -196,8 +245,6 @@ def create_mesh(polygon: np.array, density: float, method='uniform'):
     triangles_filtered = triangles[keep_triangles]
 
     return all_points, polygon_outline_vertices, triangles_filtered
-
-
 
 
 def main():
