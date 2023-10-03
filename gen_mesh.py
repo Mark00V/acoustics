@@ -7,6 +7,7 @@ import random
 import time
 from scipy.spatial import ConvexHull
 
+
 def check_vertice(point: np.array, polygon: np.array) -> bool:
     """
     Checks if a given point is inside the given polygon:
@@ -91,6 +92,7 @@ def get_min_max_values(polygon: np.array) -> np.array:
 
     return np.array([[min_x, min_y], [max_x, max_y]])
 
+
 def get_seed_rectangle(rect: np.array, density: float, method='uniform') -> np.array:
     """
     Creates random points in the boundaries of rect  and average distance density
@@ -149,7 +151,6 @@ def check_vertice_outline(point: np.array, polygon: np.array, tolerance=1e-6) ->
     :param tolerance: tolerance for check proximity
     :return: bool
     """
-
     point_on_line = False
     for nv, start_point in enumerate(polygon[:-1]):
         end_point = polygon[nv+1]
@@ -202,7 +203,6 @@ def show_mesh(all_points, polygon_outline_vertices, triangles):
     :param triangles:
     :return:
     """
-
     plt.scatter(polygon_outline_vertices[:, 0], polygon_outline_vertices[:, 1], c='b', marker='o', label='Boundary Points')
     plt.scatter(all_points[:, 0], all_points[:, 1], c='b', marker='.', label='Seed Points')
     plt.triplot(all_points[:, 0], all_points[:, 1], triangles, c='gray', label='Mesh')
