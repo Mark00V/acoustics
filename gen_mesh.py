@@ -260,8 +260,4 @@ def main():
     show_mesh(all_points, polygon_outline_vertices, triangles_filtered)
 
 
-# Infos
-# Nbr of vertices: 1215061
-# Function runtime: 82.60773491859436 seconds
-
 main()
