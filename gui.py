@@ -9,6 +9,7 @@ WINDOWS_WIDTH = 1400
 # canvas
 CANVAS_WIDTH = 1200
 CANVAS_HEIGHT = 600
+DOTSIZE = 6 # click points in canvas
 # Borderwidth (space between window frame and widgets and widgets between widgets, relative to windowsize)
 BORDER_WIDTH = 0.01
 #################################################
@@ -17,27 +18,38 @@ class FEMGUI:
 
 
     def __init__(self):
-        self.polygon_coordinates = list()
+        self.polygon_coordinates = [[0, 0]]
+        self.firstclick_canvas = True
 
 
 
     def on_canvas_click(self, event):
         # Get coordinates of right click
-        dotsize = 2
+
         x, y = event.x, event.y
         self.polygon_coordinates.append([x, y])
         self.polygon_coordinates_tmp += f"[{x},{y}]  "
         self.polygon_coordinates_str.set(self.polygon_coordinates_tmp)
 
+
+        # create lines between points
+        if self.firstclick_canvas == True:
+            self.firstclick_canvas = False
+            self.canvas.create_line(0, CANVAS_HEIGHT, x, y, fill="black", width=2)
+
+        if 'prevpoint' in FEMGUI.on_canvas_click.__dict__ and not self.firstclick_canvas:
+            self.canvas.create_line(FEMGUI.on_canvas_click.prevpoint[0], FEMGUI.on_canvas_click.prevpoint[1], x, y, fill="black", width=3)
+        FEMGUI.on_canvas_click.prevpoint = (x,y) # TODO: Why does this not work with self????
+
         # Clear content
-        self.coord_var_x.set('')
-        self.coord_var_y.set('')
+        self.coord_var_x.set('0')
+        self.coord_var_y.set('0')
 
         # Display coordinates
         self.coord_var_x.set(f"{x}")
         self.coord_var_y.set(f"{y}")
 
-        self.canvas.create_oval(x - dotsize, y - dotsize, x + dotsize, y + dotsize, outline="blue", fill="blue")
+        self.canvas.create_oval(x - DOTSIZE, y - DOTSIZE, x + DOTSIZE, y + DOTSIZE, outline="black", fill="white")
 
     def start(self):
 
@@ -51,6 +63,8 @@ class FEMGUI:
         self.canvas = tk.Canvas(root, width=CANVAS_WIDTH, height=CANVAS_HEIGHT, bg="gray")
         self.canvas.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH, rely=BORDER_WIDTH)
         self.canvas.bind("<Button-1>", self.on_canvas_click)
+        # set initial node
+        self.canvas.create_oval(0 - DOTSIZE, CANVAS_HEIGHT - DOTSIZE, 0 + DOTSIZE, CANVAS_HEIGHT + DOTSIZE, outline="black", fill="white")
 
         # Inital values for widgets
         self.coord_var_x = tk.StringVar()
@@ -58,8 +72,8 @@ class FEMGUI:
         self.polygon_coordinates_str = tk.StringVar()
         self.coord_var_x.set('0')
         self.coord_var_y.set('0')
-        self.polygon_coordinates_str.set('None')
-        self.polygon_coordinates_tmp = ''
+        self.polygon_coordinates_str.set(str(self.polygon_coordinates[0]))
+        self.polygon_coordinates_tmp = str(self.polygon_coordinates[0]) + ' '
 
         # Dynamic display coordinates last click
         coord_entry_width = 6
