@@ -181,7 +181,7 @@ class CreateMesh:
 
 
     def check_vertice_outline(self, point: np.array) -> bool:
-        # TODO: check outside line does not work
+        # TODO: if in proximity (tolerance) of corner point of polygon
         """
         Checks if a point is on outline of polyon
         :param point: np.array([x_coord0, y_coord0])
