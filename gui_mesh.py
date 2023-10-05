@@ -35,7 +35,8 @@ class CreateMesh:
         Initializes a Polygon object with the given polygon vertices and density.
 
         Args:
-        :param density: float, specifies distance between 2 points, floor is applied so line = [[0,0],[1,0]], density = 0.4
+        :param density: float, specifies distance between 2 points,
+                            floor is applied so line = [[0,0],[1,0]], density = 0.4
         returns 3 points instead of 4!
         :param polygon: np.array([
                             [x_coord0, y_coord0],
@@ -43,7 +44,9 @@ class CreateMesh:
                             [x_coord2, y_coord2],
                             ...,
                             [x_coord0, y_coord0]]) # Last vertice has to be first vertice!
-        :param method: optional, 'random' for random generation, 'uniform' for equal distance or 'randomuniform' for approx uniform
+        :param method: optional,    'random' for random generation,
+                                    'uniform' for equal distance or
+                                    'randomuniform' for approx uniform
 
         Raises:
             ValueError
@@ -211,8 +214,10 @@ class CreateMesh:
             direction_vector = end_point - start_point
             normal_vector = np.array([-direction_vector[1], direction_vector[0]])
             normal_vector = normal_vector / np.linalg.norm(normal_vector)
-            third_point_new_rect = np.array([(start_point[0] + tolerance * normal_vector[0]), (start_point[1] + tolerance * normal_vector[1])])
-            fourth_point_new_rect = np.array([(end_point[0] + tolerance * normal_vector[0]), (end_point[1] + tolerance * normal_vector[1])])
+            third_point_new_rect = np.array([(start_point[0] + tolerance * normal_vector[0]),
+                                             (start_point[1] + tolerance * normal_vector[1])])
+            fourth_point_new_rect = np.array([(end_point[0] + tolerance * normal_vector[0]),
+                                              (end_point[1] + tolerance * normal_vector[1])])
             check_polygon = np.array([start_point, end_point, fourth_point_new_rect, third_point_new_rect, start_point])
             is_on_line = self.check_vertice_polygon(point, check_polygon)
             if is_on_line:
@@ -265,6 +270,22 @@ class CreateMesh:
             plt.show()
 
 
+    def output_mesh_param(self):
+        """
+        todo: boundary nodes and lines
+        :return:
+        """
+        if len(self.all_points) < 1000:
+            print("Node Coordinates:")
+            for idp, point in enumerate(self.all_points):
+                print(f"{idp}: {point}")
+
+            print("Triangulation matrix:")
+            for idt, triangle in enumerate(self.triangles):
+                print(f"{idt}: {triangle}")
+        else:
+            print("Too many elements, printing would be unwise...")
+
     def create_mesh(self):
         """
         todo:
@@ -300,6 +321,8 @@ class CreateMesh:
         self.polygon_outline_vertices = polygon_outline_vertices
         self.triangles = triangles_filtered
         self.meshcreated = True
+
+        self.output_mesh_param()
 
         return all_points, polygon_outline_vertices, self.triangles
 
@@ -346,14 +369,17 @@ class FEMGUI:
 
     def coord_transform(self):
         scale_factor = 0.01 # todo
-        polygon_coordinates_transformed = [[scale_factor * elem[0],-1 * scale_factor * (elem[1] - 600)] for elem in self.polygon_coordinates]
-        polygon_coordinates_transformed = [[elem[0], 0 if elem[1] == -0 else elem[1]] for elem in polygon_coordinates_transformed]
+        polygon_coordinates_transformed = [[scale_factor * elem[0],-1 * scale_factor * (elem[1] - 600)]
+                                           for elem in self.polygon_coordinates]
+        polygon_coordinates_transformed = [[elem[0], 0 if elem[1] == -0 else elem[1]]
+                                           for elem in polygon_coordinates_transformed]
         return polygon_coordinates_transformed
 
 
     def create_mesh(self):
-        density = 0.1 # todo, for testing
-        method = 'randomuniform' # todo, for testing
+        method = self.methods_dropdown_var.get()
+        density_un = self.density_slider.get()
+        density = 1/density_un
         polygon_coordinates_transformed = self.coord_transform()
         polygon_vertices = np.array(polygon_coordinates_transformed)
         mesh = CreateMesh(polygon_vertices, density, method)
@@ -378,7 +404,8 @@ class FEMGUI:
             self.canvas.create_line(0, CANVAS_HEIGHT, x, y, fill="black", width=LINEWIDTH)
 
         if 'prevpoint' in FEMGUI.on_canvas_click.__dict__ and not self.firstclick_canvas:
-            self.canvas.create_line(FEMGUI.on_canvas_click.prevpoint[0], FEMGUI.on_canvas_click.prevpoint[1], x, y, fill="black", width=LINEWIDTH)
+            self.canvas.create_line(FEMGUI.on_canvas_click.prevpoint[0], FEMGUI.on_canvas_click.prevpoint[1], x, y,
+                                    fill="black", width=LINEWIDTH)
         FEMGUI.on_canvas_click.prevpoint = (x,y) # TODO: Why does this not work with self????
 
         # Clear content
@@ -389,7 +416,7 @@ class FEMGUI:
         self.coord_var_x.set(f"{x}")
         self.coord_var_y.set(f"{y}")
 
-        self.canvas.create_oval(x - DOTSIZE, y - DOTSIZE, x + DOTSIZE, y + DOTSIZE, outline="black", fill="white")
+        self.canvas.create_oval(x - DOTSIZE, y - DOTSIZE, x + DOTSIZE, y + DOTSIZE, outline="black", fill="#851d1f")
 
 
     def start(self):
@@ -403,7 +430,8 @@ class FEMGUI:
         self.canvas.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH, rely=BORDER_WIDTH)
         self.canvas.bind("<Button-1>", self.on_canvas_click)
         # set initial node
-        self.canvas.create_oval(0 - DOTSIZE, CANVAS_HEIGHT - DOTSIZE, 0 + DOTSIZE, CANVAS_HEIGHT + DOTSIZE, outline="black", fill="white")
+        self.canvas.create_oval(0 - DOTSIZE, CANVAS_HEIGHT - DOTSIZE, 0 + DOTSIZE, CANVAS_HEIGHT + DOTSIZE,
+                                outline="black", fill="white")
 
         # Inital values for widgets
         self.coord_var_x = tk.StringVar()
@@ -417,30 +445,56 @@ class FEMGUI:
         # Dynamic display coordinates last click
         coord_entry_width = 6
         coord_label = tk.Label(root, text="Coordinates:", font=("Arial", 12))
-        coord_label.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH, rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT))
+        coord_label.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH,
+                          rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT))
         coord_label_x = tk.Label(root, text="X:", font=("Arial", 12))
-        coord_label_x.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.075, rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT))
+        coord_label_x.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.075,
+                            rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT))
         coord_label_y = tk.Label(root, text="Y:", font=("Arial", 12))
-        coord_label_y.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.15, rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT))
+        coord_label_y.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.15,
+                            rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT))
 
-        coord_entry_x = tk.Entry(root, textvariable=self.coord_var_x, font=("Arial", 12), width=coord_entry_width, justify='left')
-        coord_entry_x.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.095, rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT))
-        coord_entry_y = tk.Entry(root, textvariable=self.coord_var_y, font=("Arial", 12), width=coord_entry_width, justify='left')
-        coord_entry_y.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.168, rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT))
+        coord_entry_x = tk.Entry(root, textvariable=self.coord_var_x, font=("Arial", 12),
+                                 width=coord_entry_width, justify='left')
+        coord_entry_x.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.095,
+                            rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT))
+        coord_entry_y = tk.Entry(root, textvariable=self.coord_var_y, font=("Arial", 12),
+                                 width=coord_entry_width, justify='left')
+        coord_entry_y.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.168,
+                            rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT))
 
         coord_set_label = tk.Label(root, text="All polygon vertices:", font=("Arial", 12))
-        coord_set_label.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH, rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT)+0.05)
-        polygon_coordinates = tk.Entry(root, textvariable=self.polygon_coordinates_str, state='readonly', font=("Arial", 12), width=100, justify='left')
-        polygon_coordinates.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.115, rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT)+0.05)
+        coord_set_label.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH,
+                              rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT)+0.05)
+        polygon_coordinates = tk.Entry(root, textvariable=self.polygon_coordinates_str,
+                                       state='readonly', font=("Arial", 12), width=100, justify='left')
+        polygon_coordinates.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.115,
+                                  rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT)+0.05)
 
         # finish polyon entry of coordinates
-        finish_coord_entry_button = tk.Button(root, text="Close Polygon", command=self.finish_polygon_coordinates, font=("Arial", 13))
-        finish_coord_entry_button.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.775, rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT)+0.05)
+        finish_coord_entry_button = tk.Button(root, text="Close Polygon",
+                                              command=self.finish_polygon_coordinates, font=("Arial", 13))
+        finish_coord_entry_button.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.775,
+                                        rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT)+0.05)
 
-        # create mesh
+        # create mesh button
         create_mesh_button = tk.Button(root, text="Create Mesh", command=self.create_mesh, font=("Arial", 13))
-        create_mesh_button.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.775, rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT)+0.105)
+        create_mesh_button.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.775,
+                                 rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT)+0.105)
 
+        # add slider for selecting density and dropdown option menu for method
+        self.density_slider = tk.Scale(root, from_=1, to=100, orient=tk.HORIZONTAL,
+                                       label="Density", font=("Arial", 12))
+        self.density_slider.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH, rely=0.85)
+
+        methods_label = tk.Label(root, text="Mesh Method:", font=("Arial", 12))
+        methods_label.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.1,
+                              rely=0.85)
+        methods = ['uniform', 'random', 'randomuniform']
+        self.methods_dropdown_var = tk.StringVar()
+        self.methods_dropdown_var.set(methods[0])  # default value
+        dropdown_menu = tk.OptionMenu(root, self.methods_dropdown_var, *methods)
+        dropdown_menu.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.1, rely=0.90)
         # add grid
         self.add_grid()
 

@@ -248,6 +248,20 @@ class CreateMesh:
             plt.show()
 
 
+    def output_mesh_param(self):
+        """
+
+        :return:
+        """
+        print("Node Coordinates:")
+        for idp, point in enumerate(self.all_points):
+            print(f"{idp}: {point}")
+
+        print("Triangulation matrix:")
+        for idt, triangle in enumerate(self.triangles):
+            print(f"{idt}: {triangle}")
+
+
     def create_mesh(self):
         """
         todo:
@@ -283,11 +297,13 @@ class CreateMesh:
         self.triangles = triangles_filtered
         self.meshcreated = True
 
+        self.output_mesh_param()
+
         return all_points, polygon_outline_vertices, self.triangles
 
 
 def main():
-    density = 0.05
+    density = 0.2
     #polygon_vertices = np.array([[0, 0], [1, 0], [1, 1], [0.5, 1], [0.5, 0.5], [0, 0.5], [0, 0]])
     polygon_vertices = np.array([[0, 0], [1, 0], [2, 1.2], [0.5, 0.75], [0, 1], [0, 0]])
     # start_time = time.time()
@@ -300,7 +316,7 @@ def main():
     method = 'randomuniform'
     tst = CreateMesh(polygon_vertices, density, method)
     tst.create_mesh()
-    tst.show_mesh()
+    #tst.show_mesh()
 
 
 
