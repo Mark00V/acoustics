@@ -91,6 +91,8 @@ class CreateMesh:
 
     def create_polygon_outline_vertices(self) -> np.array:
         """
+        todo: die boundaries müssen schon in create_line_vertices() numeriert zurückgegeben werden
+        evtl mit counter der funktionsaufrufe zählt...???
         Creates an array of points with average distance density
         Args:
         Nothing
@@ -99,6 +101,9 @@ class CreateMesh:
         if not np.array_equal(self.polygon[0], self.polygon[-1]):
             raise ValueError(f"First vertice has to be equal to last vertice: {self.polygon[0]} != {self.polygon[-1]}")
         outline_vertices = None
+
+        nbr_of_boundaries = len(self.polygon) - 1
+
         for nv, start_point in enumerate(self.polygon[:-1]):
             end_point = self.polygon[nv + 1]
             line = np.array([start_point, end_point])
@@ -107,6 +112,7 @@ class CreateMesh:
             else:
                 outline_vertices = np.append(outline_vertices, self.create_line_vertices(line)[:-1], axis=0)
 
+        outline_vertices_numbered = [[n, outline_vertices[n]] for n in range(len(outline_vertices))]
         return outline_vertices
 
     def get_min_max_values(self) -> np.array:
@@ -302,6 +308,103 @@ class CreateMesh:
         return all_points, polygon_outline_vertices, self.triangles
 
 
+class ElementMatrice:
+
+    def __init__(self):
+        ...
+
+    @staticmethod
+    def calc_2d_triangulat_heatflow(conductivity: float, nodes: list):
+        """
+
+        :param conductivity: k
+        :param nodes: [[x1, y1],[x2, y2],[x3, y3]]
+        :return: np.array
+        """
+
+        x1 = nodes[0][0]
+        y1 = nodes[0][1]
+        x2 = nodes[1][0]
+        y2 = nodes[1][1]
+        x3 = nodes[2][0]
+        y3 = nodes[2][1]
+        k = conductivity
+
+        val11 = -((k * (x2 - x3 - y2 + y3) ** 2) / (2 * (x3 * (-y1 + y2) + x2 * (y1 - y3) + x1 * (-y2 + y3))))
+        val12 = (k * (-x2 + x3 + y2 - y3) * (x1 - x3 - y1 + y3)) / (
+                    2 * (x3 * (y1 - y2) + x1 * (y2 - y3) + x2 * (-y1 + y3)))
+        val13 = -((k * (x1 - x2 - y1 + y2) * (x2 - x3 - y2 + y3)) / (
+                    2 * (x3 * (-y1 + y2) + x2 * (y1 - y3) + x1 * (-y2 + y3))))
+        val21 = val12
+        val22 = -((k * (x1 - x3 - y1 + y3) ** 2) / (2 * (x3 * (-y1 + y2) + x2 * (y1 - y3) + x1 * (-y2 + y3))))
+        val23 = (k * (x1 - x2 - y1 + y2) * (x1 - x3 - y1 + y3)) / (
+                    2 * (x3 * (-y1 + y2) + x2 * (y1 - y3) + x1 * (-y2 + y3)))
+        val31 = val13
+        val32 = val23
+        val33 = -((k * (x1 - x2 - y1 + y2) ** 2) / (2 * (x3 * (-y1 + y2) + x2 * (y1 - y3) + x1 * (-y2 + y3))))
+        kmat = np.array([[val11, val12, val13], [val21, val22, val23], [val31, val32, val33]])
+
+        return kmat
+
+
+class CalcFEM:
+
+    def __init__(self, all_points, polygon_outline_vertices, triangles):
+        self.all_points = all_points
+        self.polygon_outline_vertices = polygon_outline_vertices
+        self.triangles = triangles
+        self.k = 0.5  # todo, test
+
+    def get_counter_clockwise_triangle(self, nodes: list):
+        """
+        rearanges the nodes, so that they are counter clockwise
+        TODO: IST DAS NOTWENIG????
+        :param nodes:
+        :return:
+        """
+        x1 = nodes[0][0]
+        y1 = nodes[0][1]
+        x2 = nodes[1][0]
+        y2 = nodes[1][1]
+        x3 = nodes[2][0]
+        y3 = nodes[2][1]
+        new_nodes = [nodes[0]]
+        if x2 < x1:
+            new_nodes.append(nodes[2])
+            new_nodes.append(nodes[1])
+        elif x2 == x1:
+            if y2 < y1:
+                new_nodes.append(nodes[1])
+                new_nodes.append(nodes[2])
+            else:
+                new_nodes.append(nodes[2])
+                new_nodes.append(nodes[1])
+        elif x2 > x1:
+            new_nodes.append(nodes[1])
+            new_nodes.append(nodes[2])
+        return new_nodes
+
+
+    def calc_elementmatrices(self):
+        nbr_of_elements = len(self.triangles)
+        all_element_matrices = [0 for elem in range(nbr_of_elements)]
+
+        for idx, triangle in enumerate(self.triangles):
+            p1, p2, p3 = triangle[0], triangle[1], triangle[2]
+            x1 = self.all_points[p1][0]
+            y1 = self.all_points[p1][1]
+            x2 = self.all_points[p2][0]
+            y2 = self.all_points[p2][1]
+            x3 = self.all_points[p3][0]
+            y3 = self.all_points[p3][1]
+            nodes = [[x1, y1], [x2, y2], [x3, y3]]
+            elemmatrix = ElementMatrice.calc_2d_triangulat_heatflow(self.k, nodes)
+            all_element_matrices[idx] = elemmatrix
+
+        # for elem in all_element_matrices:
+        #     print(elem)
+
+
 def main():
     density = 0.2
     #polygon_vertices = np.array([[0, 0], [1, 0], [1, 1], [0.5, 1], [0.5, 0.5], [0, 0.5], [0, 0]])
@@ -316,7 +419,9 @@ def main():
     method = 'randomuniform'
     tst = CreateMesh(polygon_vertices, density, method)
     all_points, polygon_outline_vertices, triangles = tst.create_mesh()
-    tst.show_mesh()
+    calcfem = CalcFEM(all_points, polygon_outline_vertices, triangles)
+    calcfem.calc_elementmatrices()
+    #tst.show_mesh()
 
 
 
