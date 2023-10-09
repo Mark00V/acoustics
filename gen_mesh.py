@@ -297,9 +297,113 @@ class CreateMesh:
         self.triangles = triangles_filtered
         self.meshcreated = True
 
-        self.output_mesh_param()
+        # self.output_mesh_param() # prints output
 
         return all_points, polygon_outline_vertices, self.triangles
+
+
+class ElementMatrice:
+
+    def __init__(self):
+        ...
+
+    @staticmethod
+    def calc_2d_triangulat_heatflow(conductivity: float, nodes: list):
+        """
+
+        :param conductivity: k
+        :param nodes: [[x1, y1],[x2, y2],[x3, y3]]
+        :return: np.array
+        """
+
+        x1 = nodes[0][0]
+        y1 = nodes[0][1]
+        x2 = nodes[1][0]
+        y2 = nodes[1][1]
+        x3 = nodes[2][0]
+        y3 = nodes[2][1]
+        k = conductivity
+
+        val11 = -((k * (x2 - x3 - y2 + y3) ** 2) / (2 * (x3 * (-y1 + y2) + x2 * (y1 - y3) + x1 * (-y2 + y3))))
+        val12 = (k * (-x2 + x3 + y2 - y3) * (x1 - x3 - y1 + y3)) / (
+                    2 * (x3 * (y1 - y2) + x1 * (y2 - y3) + x2 * (-y1 + y3)))
+        val13 = -((k * (x1 - x2 - y1 + y2) * (x2 - x3 - y2 + y3)) / (
+                    2 * (x3 * (-y1 + y2) + x2 * (y1 - y3) + x1 * (-y2 + y3))))
+        val21 = val12
+        val22 = -((k * (x1 - x3 - y1 + y3) ** 2) / (2 * (x3 * (-y1 + y2) + x2 * (y1 - y3) + x1 * (-y2 + y3))))
+        val23 = (k * (x1 - x2 - y1 + y2) * (x1 - x3 - y1 + y3)) / (
+                    2 * (x3 * (-y1 + y2) + x2 * (y1 - y3) + x1 * (-y2 + y3)))
+        val31 = val13
+        val32 = val23
+        val33 = -((k * (x1 - x2 - y1 + y2) ** 2) / (2 * (x3 * (-y1 + y2) + x2 * (y1 - y3) + x1 * (-y2 + y3))))
+        kmat = np.array([[val11, val12, val13], [val21, val22, val23], [val31, val32, val33]])
+
+        return kmat
+
+
+class CalcFEM:
+
+    def __init__(self, all_points, polygon_outline_vertices, triangles):
+        self.all_points = all_points
+        self.polygon_outline_vertices = polygon_outline_vertices
+        self.triangles = triangles
+        self.k = 0.5  # todo, test
+
+    def get_counter_clockwise_triangle(self, nodes: list):
+        """
+        rearanges the nodes, so that they are counter clockwise
+        TODO: IST DAS NOTWENIG????
+        :param nodes:
+        :return:
+        """
+        x1 = nodes[0][0]
+        y1 = nodes[0][1]
+        x2 = nodes[1][0]
+        y2 = nodes[1][1]
+        x3 = nodes[2][0]
+        y3 = nodes[2][1]
+        new_nodes = [nodes[0]]
+        if x2 < x1:
+            new_nodes.append(nodes[2])
+            new_nodes.append(nodes[1])
+        elif x2 == x1:
+            if y2 < y1:
+                new_nodes.append(nodes[1])
+                new_nodes.append(nodes[2])
+            else:
+                new_nodes.append(nodes[2])
+                new_nodes.append(nodes[1])
+        elif x2 > x1:
+            new_nodes.append(nodes[1])
+            new_nodes.append(nodes[2])
+        return new_nodes
+
+
+
+    def calc_elementmatrices(self):
+        nbr_of_elements = len(self.triangles)
+        all_element_matrices = np.zeros(nbr_of_elements)
+
+        for idx, triangle in enumerate(self.triangles):
+            p1, p2, p3 = triangle[0], triangle[1], triangle[2]
+            x1 = self.all_points[p1][0]
+            y1 = self.all_points[p1][1]
+            x2 = self.all_points[p2][0]
+            y2 = self.all_points[p2][1]
+            x3 = self.all_points[p3][0]
+            y3 = self.all_points[p3][1]
+            nodes = [[x1, y1], [x2, y2], [x3, y3]]
+            elemmatrix = ElementMatrice.calc_2d_triangulat_heatflow(self.k, nodes)
+            if idx in {0,1,2}:
+                 print(triangle)
+                 print(nodes)
+                 self.get_counter_clockwise_triangle(nodes)
+                 print(elemmatrix)
+            #all_element_matrices[idx] = elemmatrix
+
+
+
+
 
 
 def main():
@@ -315,7 +419,9 @@ def main():
     # show_mesh(all_points, polygon_outline_vertices, triangles_filtered)
     method = 'randomuniform'
     tst = CreateMesh(polygon_vertices, density, method)
-    tst.create_mesh()
+    all_points, polygon_outline_vertices, triangles = tst.create_mesh()
+    calcfem = CalcFEM(all_points, polygon_outline_vertices, triangles)
+    calcfem.calc_elementmatrices()
     #tst.show_mesh()
 
 

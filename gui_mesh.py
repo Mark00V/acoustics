@@ -286,6 +286,19 @@ class CreateMesh:
         else:
             print("Too many elements, printing would be unwise...")
 
+
+    def write_output(self):
+        output_to_write = ''
+        output_to_write += 'Coordinates of nodes\n'
+        for idp, point in enumerate(self.all_points):
+            output_to_write += f"{idp}: {point}\n"
+        output_to_write += '\n\nTriangulation  matrix\n'
+        for idt, triangle in enumerate(self.triangles):
+            output_to_write += f"{idt}: {triangle}\n"
+        with open('output.txt', 'w') as f:
+            f.write(output_to_write)
+
+
     def create_mesh(self):
         """
         todo:
@@ -323,6 +336,7 @@ class CreateMesh:
         self.meshcreated = True
 
         self.output_mesh_param()
+        self.write_output()
 
         return all_points, polygon_outline_vertices, self.triangles
 
@@ -382,10 +396,12 @@ class FEMGUI:
         density = 1/density_un
         polygon_coordinates_transformed = self.coord_transform()
         polygon_vertices = np.array(polygon_coordinates_transformed)
-        mesh = CreateMesh(polygon_vertices, density, method)
-        mesh.create_mesh()
-        mesh.show_mesh()
+        self.mesh = CreateMesh(polygon_vertices, density, method)
+        self.mesh.create_mesh()
+        self.mesh.show_mesh()
 
+    def create_output(self):
+        ...
 
 
 
@@ -495,6 +511,11 @@ class FEMGUI:
         self.methods_dropdown_var.set(methods[0])  # default value
         dropdown_menu = tk.OptionMenu(root, self.methods_dropdown_var, *methods)
         dropdown_menu.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.1, rely=0.90)
+
+        # output to file
+        write_file_button = tk.Button(root, text="Write Mesh to File", command=self.create_output(), font=("Arial", 13))
+        write_file_button.place(relx=0.4, rely=0.85)
+
         # add grid
         self.add_grid()
 
