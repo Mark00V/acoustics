@@ -46,7 +46,6 @@ class CreateMesh:
         if not np.array_equal(self.polygon[0], self.polygon[-1]):
             raise ValueError(f"First vertice has to be equal to last vertice: {self.polygon[0]} != {self.polygon[-1]}")
 
-
     def check_vertice(self, point: np.array) -> bool:
         """
         Checks if a given point is inside self.polygon:
@@ -94,8 +93,6 @@ class CreateMesh:
 
     def create_polygon_outline_vertices(self) -> np.array:
         """
-        todo: die boundaries müssen schon in create_line_vertices() numeriert zurückgegeben werden
-        evtl mit counter der funktionsaufrufe zählt...???
         Creates an array of points with average distance density
         Args:
         Nothing
@@ -103,20 +100,35 @@ class CreateMesh:
         """
         if not np.array_equal(self.polygon[0], self.polygon[-1]):
             raise ValueError(f"First vertice has to be equal to last vertice: {self.polygon[0]} != {self.polygon[-1]}")
+
         outline_vertices = None
 
-        nbr_of_boundaries = len(self.polygon) - 1
-
+        boundaries = list()
+        n_point = 0
         for nv, start_point in enumerate(self.polygon[:-1]):
             end_point = self.polygon[nv + 1]
             line = np.array([start_point, end_point])
             if nv == 0:
                 outline_vertices = self.create_line_vertices(line)[:-1]
+                boundary_points = list()
+                for vertice in outline_vertices:
+                    boundary_points.append([n_point, vertice])
+                    n_point += 1
+                boundaries.append(boundary_points)
             else:
-                outline_vertices = np.append(outline_vertices, self.create_line_vertices(line)[:-1], axis=0)
+                this_boundary = self.create_line_vertices(line)[:-1]
+                boundary_points = list()
+                for vertice in this_boundary:
+                    boundary_points.append([n_point, vertice])
+                    n_point += 1
+                boundaries.append(boundary_points)
+                outline_vertices = np.append(outline_vertices, this_boundary, axis=0)
 
-        outline_vertices_numbered = [[n, outline_vertices[n]] for n in range(len(outline_vertices))]
-        return outline_vertices
+        boundaries_numbered = boundaries
+        all_outline_vertices_numbered = [[n_point, outline_vertices[n_point]] for n_point in range(len(outline_vertices))]
+
+        return all_outline_vertices_numbered, boundaries_numbered
+
 
     def get_min_max_values(self) -> np.array:
         """
@@ -220,6 +232,9 @@ class CreateMesh:
         Nothing
         :return: np.array
         """
+
+        all_outline_vertices_numbered, boundaries_numbered = self.create_polygon_outline_vertices()
+
         rect_min_max_coords = self.get_min_max_values()
         rect_seed_points = self.get_seed_rectangle(rect_min_max_coords)
 
@@ -229,10 +244,17 @@ class CreateMesh:
                 if not self.check_vertice_outline(point):
                     keep_points.append(idn)
         filtered_seed_points = rect_seed_points[keep_points]
-        polygon_outline_vertices = self.create_polygon_outline_vertices()
-        all_points = np.append(filtered_seed_points, polygon_outline_vertices, axis=0)
+        last_point_polygon_outline_vertice = all_outline_vertices_numbered[-1][0] + 1
+        nbr_of_filtered_seed_points = len(filtered_seed_points)
+        maxnode = last_point_polygon_outline_vertice + nbr_of_filtered_seed_points
+        filtered_seed_points_numbered = [[n_point, filtered_seed_points[n_point - last_point_polygon_outline_vertice]] for n_point in range(last_point_polygon_outline_vertice, maxnode)]
 
-        return all_points
+        polygon_outline_vertices = [elem[1] for elem in all_outline_vertices_numbered]
+        all_points = np.append(polygon_outline_vertices, filtered_seed_points, axis=0)
+        all_points_numbered = all_outline_vertices_numbered + filtered_seed_points_numbered
+
+        return all_points, all_points_numbered, all_outline_vertices_numbered, boundaries_numbered
+
 
     def show_mesh(self):
         """
@@ -279,12 +301,8 @@ class CreateMesh:
         :param method:
         :return:
         """
-        all_points = self.get_seed_polygon()
-
-        # remove duplicates
-        all_points = np.unique(all_points, axis=0)
-
-        polygon_outline_vertices = self.create_polygon_outline_vertices()
+        all_points, all_points_numbered, all_outline_vertices_numbered, boundaries_numbered = self.get_seed_polygon()
+        polygon_outline_vertices = [elem[1] for elem in all_outline_vertices_numbered]
 
         # Triangulation
         triangulation = Delaunay(all_points)
@@ -305,10 +323,9 @@ class CreateMesh:
         self.polygon_outline_vertices = polygon_outline_vertices
         self.triangles = triangles_filtered
         self.meshcreated = True
-
         # self.output_mesh_param() # prints output
 
-        return all_points, polygon_outline_vertices, self.triangles
+        return all_points_numbered, all_outline_vertices_numbered, boundaries_numbered, self.triangles
 
 
 class ElementMatrice:
@@ -352,13 +369,17 @@ class ElementMatrice:
 
 class CalcFEM:
 
-    def __init__(self, all_points, polygon_outline_vertices, triangles):
-        self.all_points = all_points
-        self.polygon_outline_vertices = polygon_outline_vertices
+    def __init__(self, all_points_numbered, all_outline_vertices_numbered, boundaries_numbered, triangles):
+        self.all_points_numbered = all_points_numbered
+        self.all_outline_vertices_numbered = all_outline_vertices_numbered
+        self.boundaries_numbered = boundaries_numbered
         self.triangles = triangles
+        self.all_points = np.array([elem[1] for elem in all_points_numbered])
+        self.polygon_outline_vertices = np.array([elem[1] for elem in all_outline_vertices_numbered])
         self.k = 0.5  # todo, test
         self.zuordtab = triangles
         self.maxnode = len(self.all_points)
+
 
     def get_counter_clockwise_triangle(self, nodes: list):
         """
@@ -371,8 +392,6 @@ class CalcFEM:
         y1 = nodes[0][1]
         x2 = nodes[1][0]
         y2 = nodes[1][1]
-        x3 = nodes[2][0]
-        y3 = nodes[2][1]
         new_nodes = [nodes[0]]
         if x2 < x1:
             new_nodes.append(nodes[2])
@@ -408,10 +427,9 @@ class CalcFEM:
             self.all_element_matrices[idx] = elemmatrix
 
 
-
     def calc_force_vector(self):
         self.lastvektor = np.zeros(self.maxnode)
-        self.lastvektor[0] = 1/1000 # todo Test
+        self.lastvektor[0] = 1
 
     def calc_system_matrices(self):
         self.syssteifarray = np.zeros((self.maxnode, self.maxnode))
@@ -424,12 +442,37 @@ class CalcFEM:
                     ztb = int(self.zuordtab[ielem, b])
                     self.syssteifarray[zta, ztb] = self.syssteifarray[zta, ztb] + elesteifmat[a, b]
 
-    def solve_linear_system(self):
+        self.print_sys_mat()
 
+    def implement_diriclet(self, sysmatrix, diriclet_list):
+        for position, value in diriclet_list:
+            sysmatrix[:, position] = 0
+            sysmatrix[position, :] = 0
+            sysmatrix[position, position] = 1
+
+        return sysmatrix
+
+    def print_sys_mat(self):
+        if len(self.syssteifarray) < 50:
+            print("[", end='\n')
+            for idx, elem in enumerate(self.syssteifarray):
+                print("[", end='')
+                for idy, val in enumerate(elem):
+                    if val == 0:
+                        val_str = '_____'
+                    else:
+                        val_str = f"+{abs(val):.2f}" if val >= 0 else f"-{abs(val):.2f}"
+                    if idy < len(elem) - 1:
+                        print(f"{val_str},", end='')
+                    elif idy >= len(elem) - 1 and idx < len(self.syssteifarray) -1:
+                        print(f"{val_str}],", end='\n')
+                    else:
+                        print(f"{val_str}]", end='\n')
+            print("]")
+
+    def solve_linear_system(self):
         self.solution = np.linalg.solve(self.syssteifarray, self.lastvektor)
-        #print(self.syssteifarray)
-        #print(self.lastvektor)
-        print(self.solution)
+
 
 
 
@@ -502,7 +545,7 @@ class CalcFEM:
 
 
 def main():
-    density = 0.5
+    density = 0.25
     #polygon_vertices = np.array([[0, 0], [1, 0], [1, 1], [0.5, 1], [0.5, 0.5], [0, 0.5], [0, 0]])
     polygon_vertices = np.array([[0, 0], [1, 0], [2, 1.2], [0.5, 0.75], [0, 1], [0, 0]])
     # start_time = time.time()
@@ -514,13 +557,13 @@ def main():
     # show_mesh(all_points, polygon_outline_vertices, triangles_filtered)
     method = 'randomuniform'
     tst = CreateMesh(polygon_vertices, density, method)
-    all_points, polygon_outline_vertices, triangles = tst.create_mesh()
-    calcfem = CalcFEM(all_points, polygon_outline_vertices, triangles)
+    all_points_numbered, all_outline_vertices_numbered, boundaries_numbered, triangles = tst.create_mesh()
+    calcfem = CalcFEM(all_points_numbered, all_outline_vertices_numbered, boundaries_numbered, triangles)
     calcfem.calc_elementmatrices()
     calcfem.calc_system_matrices()
     calcfem.calc_force_vector()
     calcfem.solve_linear_system()
-    calcfem.plot_solution()
+    #calcfem.plot_solution()
     #tst.show_mesh()
 
 
