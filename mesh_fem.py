@@ -6,6 +6,9 @@ import math
 import random
 import time
 from scipy.spatial import ConvexHull
+from scipy.interpolate import griddata
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+import matplotlib.tri as tri
 
 class CreateMesh:
     """
@@ -354,6 +357,8 @@ class CalcFEM:
         self.polygon_outline_vertices = polygon_outline_vertices
         self.triangles = triangles
         self.k = 0.5  # todo, test
+        self.zuordtab = triangles
+        self.maxnode = len(self.all_points)
 
     def get_counter_clockwise_triangle(self, nodes: list):
         """
@@ -386,8 +391,9 @@ class CalcFEM:
 
 
     def calc_elementmatrices(self):
-        nbr_of_elements = len(self.triangles)
-        all_element_matrices = [0 for elem in range(nbr_of_elements)]
+        self.nbr_of_elements = len(self.triangles)
+
+        self.all_element_matrices = np.zeros((self.nbr_of_elements, 3, 3))
 
         for idx, triangle in enumerate(self.triangles):
             p1, p2, p3 = triangle[0], triangle[1], triangle[2]
@@ -399,14 +405,104 @@ class CalcFEM:
             y3 = self.all_points[p3][1]
             nodes = [[x1, y1], [x2, y2], [x3, y3]]
             elemmatrix = ElementMatrice.calc_2d_triangulat_heatflow(self.k, nodes)
-            all_element_matrices[idx] = elemmatrix
+            self.all_element_matrices[idx] = elemmatrix
 
-        # for elem in all_element_matrices:
-        #     print(elem)
+
+
+    def calc_force_vector(self):
+        self.lastvektor = np.zeros(self.maxnode)
+        self.lastvektor[0] = 1/1000 # todo Test
+
+    def calc_system_matrices(self):
+        self.syssteifarray = np.zeros((self.maxnode, self.maxnode))
+
+        for ielem in range(self.nbr_of_elements):
+            elesteifmat = self.all_element_matrices[ielem]
+            for a in range(3):
+                for b in range(3):
+                    zta = int(self.zuordtab[ielem, a])
+                    ztb = int(self.zuordtab[ielem, b])
+                    self.syssteifarray[zta, ztb] = self.syssteifarray[zta, ztb] + elesteifmat[a, b]
+
+    def solve_linear_system(self):
+
+        self.solution = np.linalg.solve(self.syssteifarray, self.lastvektor)
+        #print(self.syssteifarray)
+        #print(self.lastvektor)
+        print(self.solution)
+
+
+
+    def plot_solution(self):
+
+        solutionallnodes = np.zeros((self.maxnode, 3))
+        for i in range(self.maxnode):
+            solutionallnodes[i, 0] = self.all_points[i, 0]
+            solutionallnodes[i, 1] = self.all_points[i, 1]
+        datax = solutionallnodes[:, 0]
+        datay = solutionallnodes[:, 1]
+        dataz = np.real(self.solution)
+
+        minx = min(datax)
+        maxx = max(datax)
+        miny = min(datay)
+        maxy = max(datay)
+
+        points = solutionallnodes[:, (0, 1)]
+        values = dataz
+        grid_x, grid_y = np.mgrid[minx:maxx:600j, miny:maxy:600j]
+        grid_z1 = griddata(points, values, (grid_x, grid_y), method='linear')
+
+        # Contourplot
+        nr_of_contours = 100  # Contouren insgesamt, hoher Wert für Quasi-Densityplot
+        nr_of_contourlines = 5  # EIngezeichnete Contourlinien, Wert nicht exakt...
+        aspectxy = 1
+        ctlines = int(nr_of_contours / nr_of_contourlines)
+
+        dataX = grid_x
+        dataY = grid_y
+        dataZ = grid_z1
+
+        # fig1, ax = plt.subplots()
+        # CS1 = ax.contourf(dataX, dataY, dataZ, nr_of_contours, cmap=plt.cm.gnuplot2)
+        # ax.set_title('Temperature field')
+        # ax.set_xlabel('x [m]')
+        # ax.set_ylabel('y [m]')
+        # ax.set_aspect(aspectxy)
+        #
+        # divider = make_axes_locatable(ax)
+        # cax = divider.append_axes("right", size="5%", pad=0.2)
+        # cbar = fig1.colorbar(CS1, cax=cax)
+        # cbar.ax.set_ylabel('Temp [T]')
+        #
+        # plt.scatter(self.polygon_outline_vertices[:, 0], self.polygon_outline_vertices[:, 1], c='b', marker='o',
+        #             label='Boundary Points')
+        # plt.scatter(self.all_points[:, 0], self.all_points[:, 1], c='b', marker='.', label='Seed Points')
+        # plt.triplot(self.all_points[:, 0], self.all_points[:, 1], self.triangles, c='gray', label='Mesh')
+
+        triang_mpl = tri.Triangulation(self.all_points[:, 0], self.all_points[:, 1], self.triangles)
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.set_title('Temperature field')
+        ax.set_xlabel('x [m]')
+        ax.set_ylabel('y [m]')
+        ax.set_aspect(aspectxy)
+
+
+        contour = ax.tricontourf(triang_mpl, values, cmap='viridis')
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.2)
+        cbar = fig.colorbar(contour, cax=cax)
+        cbar.ax.set_ylabel('Temp [T]')
+
+        scatter = ax.scatter(self.all_points[:, 0], self.all_points[:, 1], c=values, cmap='viridis', marker='.', edgecolors='w')
+        triplot = ax.triplot(triang_mpl, 'w-', linewidth=0.5)
+
+        plt.show()
 
 
 def main():
-    density = 0.2
+    density = 0.5
     #polygon_vertices = np.array([[0, 0], [1, 0], [1, 1], [0.5, 1], [0.5, 0.5], [0, 0.5], [0, 0]])
     polygon_vertices = np.array([[0, 0], [1, 0], [2, 1.2], [0.5, 0.75], [0, 1], [0, 0]])
     # start_time = time.time()
@@ -421,6 +517,10 @@ def main():
     all_points, polygon_outline_vertices, triangles = tst.create_mesh()
     calcfem = CalcFEM(all_points, polygon_outline_vertices, triangles)
     calcfem.calc_elementmatrices()
+    calcfem.calc_system_matrices()
+    calcfem.calc_force_vector()
+    calcfem.solve_linear_system()
+    calcfem.plot_solution()
     #tst.show_mesh()
 
 
