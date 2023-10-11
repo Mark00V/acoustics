@@ -362,7 +362,7 @@ class ElementMatrice:
         val31 = val13
         val32 = val23
         val33 = -((k * (x1 - x2 - y1 + y2) ** 2) / (2 * (x3 * (-y1 + y2) + x2 * (y1 - y3) + x1 * (-y2 + y3))))
-        kmat = np.array([[val11, val12, val13], [val21, val22, val23], [val31, val32, val33]])
+        kmat = np.array([[val11, val12, val13], [val21, val22, val23], [val31, val32, val33]], dtype=np.single)
 
         return kmat
 
@@ -412,7 +412,7 @@ class CalcFEM:
     def calc_elementmatrices(self):
         self.nbr_of_elements = len(self.triangles)
 
-        self.all_element_matrices = np.zeros((self.nbr_of_elements, 3, 3))
+        self.all_element_matrices = np.zeros((self.nbr_of_elements, 3, 3), dtype=np.single)
 
         for idx, triangle in enumerate(self.triangles):
             p1, p2, p3 = triangle[0], triangle[1], triangle[2]
@@ -428,11 +428,11 @@ class CalcFEM:
 
 
     def calc_force_vector(self):
-        self.lastvektor = np.zeros(self.maxnode)
-        self.lastvektor[0] = 1
+        self.lastvektor = np.zeros(self.maxnode, dtype=np.single)
+        self.lastvektor[0] = 0.00001
 
     def calc_system_matrices(self):
-        self.syssteifarray = np.zeros((self.maxnode, self.maxnode))
+        self.syssteifarray = np.zeros((self.maxnode, self.maxnode), dtype=np.single)
 
         for ielem in range(self.nbr_of_elements):
             elesteifmat = self.all_element_matrices[ielem]
@@ -563,7 +563,7 @@ def main():
     calcfem.calc_system_matrices()
     calcfem.calc_force_vector()
     calcfem.solve_linear_system()
-    #calcfem.plot_solution()
+    calcfem.plot_solution()
     #tst.show_mesh()
 
 
