@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import matplotlib.path as mpath
+import numpy
 import numpy as np
 from scipy.spatial import Delaunay
 import math
@@ -376,10 +377,11 @@ class CalcFEM:
         self.triangles = triangles
         self.all_points = np.array([elem[1] for elem in all_points_numbered])
         self.polygon_outline_vertices = np.array([elem[1] for elem in all_outline_vertices_numbered])
-        self.k = 0.5  # todo, test
+        self.k = 0.5 # todo, test
         self.zuordtab = triangles
         self.maxnode = len(self.all_points)
-
+        self.syssteifarray = None
+        self.solution = None
 
     def get_counter_clockwise_triangle(self, nodes: list):
         """
@@ -442,37 +444,60 @@ class CalcFEM:
                     ztb = int(self.zuordtab[ielem, b])
                     self.syssteifarray[zta, ztb] = self.syssteifarray[zta, ztb] + elesteifmat[a, b]
 
-        self.print_sys_mat()
 
-    def implement_diriclet(self, sysmatrix, diriclet_list):
+    def implement_diriclet(self, sysmatrix, forcevector, diriclet_list):
+
+        diriclet_list_positions = [pos[0] for pos in diriclet_list]
+        diriclet_list_values = [pos[1] for pos in diriclet_list]
+        original_sysmatrix = np.copy(sysmatrix)
+
+        # sysmatrix
         for position, value in diriclet_list:
             sysmatrix[:, position] = 0
             sysmatrix[position, :] = 0
             sysmatrix[position, position] = 1
 
-        return sysmatrix
+        # force vector
+        forcevector = forcevector - np.dot(original_sysmatrix[:, diriclet_list_positions], diriclet_list_values)
+        for pos, value in diriclet_list:
+            forcevector[pos] = value
 
-    def print_sys_mat(self):
-        if len(self.syssteifarray) < 50:
-            print("[", end='\n')
-            for idx, elem in enumerate(self.syssteifarray):
+        return sysmatrix, forcevector
+
+
+    def print_matrix(self, matrix):
+
+        if not isinstance(matrix[0], numpy.ndarray):
+            if len(matrix) < 50:
                 print("[", end='')
-                for idy, val in enumerate(elem):
-                    if val == 0:
-                        val_str = '_____'
+                for idx, val in enumerate(matrix):
+                    if idx < len(matrix) - 1:
+                        print(f"+{abs(val):.2f}," if val >= 0 else f"-{abs(val):.2f},", end='')
                     else:
-                        val_str = f"+{abs(val):.2f}" if val >= 0 else f"-{abs(val):.2f}"
-                    if idy < len(elem) - 1:
-                        print(f"{val_str},", end='')
-                    elif idy >= len(elem) - 1 and idx < len(self.syssteifarray) -1:
-                        print(f"{val_str}],", end='\n')
-                    else:
-                        print(f"{val_str}]", end='\n')
-            print("]")
+                        print(f"+{abs(val):.2f}" if val >= 0 else f"-{abs(val):.2f}", end='')
+                print("]")
+
+        else:
+            if len(matrix) < 50:
+                print("[", end='\n')
+                for idx, elem in enumerate(matrix):
+                    print("[", end='')
+                    for idy, val in enumerate(elem):
+                        if val == 0:
+                            val_str = '_____'
+                        else:
+                            val_str = f"+{abs(val):.2f}" if val >= 0 else f"-{abs(val):.2f}"
+                        if idy < len(elem) - 1:
+                            print(f"{val_str},", end='')
+                        elif idy >= len(elem) - 1 and idx < len(matrix) -1:
+                            print(f"{val_str}],", end='\n')
+                        else:
+                            print(f"{val_str}]", end='\n')
+                print("]")
 
     def solve_linear_system(self):
-        self.solution = np.linalg.solve(self.syssteifarray, self.lastvektor)
-
+        if self.syssteifarray is not None: # since it might be a np.array
+            self.solution = np.linalg.solve(self.syssteifarray, self.lastvektor)
 
 
 
@@ -532,20 +557,49 @@ class CalcFEM:
         ax.set_aspect(aspectxy)
 
 
-        contour = ax.tricontourf(triang_mpl, values, cmap='viridis')
+        contour = ax.tricontourf(triang_mpl, values, cmap='viridis', levels=20)
         divider = make_axes_locatable(ax)
         cax = divider.append_axes("right", size="5%", pad=0.2)
         cbar = fig.colorbar(contour, cax=cax)
         cbar.ax.set_ylabel('Temp [T]')
 
-        scatter = ax.scatter(self.all_points[:, 0], self.all_points[:, 1], c=values, cmap='viridis', marker='.', edgecolors='w')
-        triplot = ax.triplot(triang_mpl, 'w-', linewidth=0.5)
+        scatter = ax.scatter(self.all_points[:, 0], self.all_points[:, 1], c=values, cmap='viridis', marker='.', edgecolors='w', s=10)
+        triplot = ax.triplot(triang_mpl, 'w-', linewidth=0.1)
 
         plt.show()
 
+    def calc_fem(self):
+
+        boundary0 = self.boundaries_numbered[0]
+        boundary1 = self.boundaries_numbered[1]
+        boundary3 = self.boundaries_numbered[3]
+        value_boundary0 = 50
+        value_boundary1 = 100
+        value_boundary3 = 80
+        boundary0_nodes = [(nbr[0], value_boundary0) for nbr in boundary0]
+        boundary1_nodes = [(nbr[0], value_boundary1) for nbr in boundary1]
+        boundary3_nodes = [(nbr[0], value_boundary3) for nbr in boundary3]
+
+        all_diriclet = boundary0_nodes + boundary1_nodes + boundary3_nodes
+
+        self.calc_elementmatrices()
+        self.calc_system_matrices()
+        self.calc_force_vector()
+
+        sysmatrix_adj, force_vector_adj = self.implement_diriclet(self.syssteifarray, self.lastvektor, all_diriclet)
+        self.syssteifarray = sysmatrix_adj
+        self.lastvektor = force_vector_adj
+
+        self.print_matrix(self.syssteifarray)
+        self.print_matrix(self.lastvektor)
+
+        self.solve_linear_system()
+        self.plot_solution()
+
+
 
 def main():
-    density = 0.25
+    density = 0.1
     #polygon_vertices = np.array([[0, 0], [1, 0], [1, 1], [0.5, 1], [0.5, 0.5], [0, 0.5], [0, 0]])
     polygon_vertices = np.array([[0, 0], [1, 0], [2, 1.2], [0.5, 0.75], [0, 1], [0, 0]])
     # start_time = time.time()
@@ -559,11 +613,7 @@ def main():
     tst = CreateMesh(polygon_vertices, density, method)
     all_points_numbered, all_outline_vertices_numbered, boundaries_numbered, triangles = tst.create_mesh()
     calcfem = CalcFEM(all_points_numbered, all_outline_vertices_numbered, boundaries_numbered, triangles)
-    calcfem.calc_elementmatrices()
-    calcfem.calc_system_matrices()
-    calcfem.calc_force_vector()
-    calcfem.solve_linear_system()
-    calcfem.plot_solution()
+    calcfem.calc_fem()
     #tst.show_mesh()
 
 
