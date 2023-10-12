@@ -265,10 +265,11 @@ class CreateMesh:
         :param triangles:
         :return:
         """
+        polygon_outline_vertices = np.array(self.polygon_outline_vertices)
         if not self.meshcreated:
             print(f"Run create_mesh() first!")
         else:
-            plt.scatter(self.polygon_outline_vertices[:, 0], self.polygon_outline_vertices[:, 1], c='b', marker='o',
+            plt.scatter(polygon_outline_vertices[:, 0], polygon_outline_vertices[:, 1], c='b', marker='o',
                         label='Boundary Points')
             plt.scatter(self.all_points[:, 0], self.all_points[:, 1], c='b', marker='.', label='Seed Points')
             plt.triplot(self.all_points[:, 0], self.all_points[:, 1], self.triangles, c='gray', label='Mesh')
@@ -614,7 +615,7 @@ def main():
     all_points_numbered, all_outline_vertices_numbered, boundaries_numbered, triangles = tst.create_mesh()
     calcfem = CalcFEM(all_points_numbered, all_outline_vertices_numbered, boundaries_numbered, triangles)
     calcfem.calc_fem()
-    #tst.show_mesh()
+    tst.show_mesh()
 
 
 

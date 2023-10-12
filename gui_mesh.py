@@ -8,6 +8,9 @@ import time
 from scipy.spatial import ConvexHull
 import tkinter as tk
 import math
+from scipy.interpolate import griddata
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+import matplotlib.tri as tri
 
 #################################################
 # tkinter static parameters
@@ -17,26 +20,289 @@ WINDOWS_WIDTH = 1400
 # canvas
 CANVAS_WIDTH = 1200
 CANVAS_HEIGHT = 600
-DOTSIZE = 6    # click points in canvas
+DOTSIZE = 6  # click points in canvas
 LINEWIDTH = 2
-GRIDSPACE = 25 # space between grid
+GRIDSPACE = 25  # space between grid
 # Borderwidth (space between window frame and widgets and widgets between widgets, relative to windowsize)
 BORDER_WIDTH = 0.01
+
+
 #################################################
+
+
+class ElementMatrice:
+
+    def __init__(self):
+        ...
+
+    @staticmethod
+    def calc_2d_triangulat_heatflow(conductivity: float, nodes: list):
+        """
+
+        :param conductivity: k
+        :param nodes: [[x1, y1],[x2, y2],[x3, y3]]
+        :return: np.array
+        """
+
+        x1 = nodes[0][0]
+        y1 = nodes[0][1]
+        x2 = nodes[1][0]
+        y2 = nodes[1][1]
+        x3 = nodes[2][0]
+        y3 = nodes[2][1]
+        k = conductivity
+
+        val11 = -((k * (x2 - x3 - y2 + y3) ** 2) / (2 * (x3 * (-y1 + y2) + x2 * (y1 - y3) + x1 * (-y2 + y3))))
+        val12 = (k * (-x2 + x3 + y2 - y3) * (x1 - x3 - y1 + y3)) / (
+                2 * (x3 * (y1 - y2) + x1 * (y2 - y3) + x2 * (-y1 + y3)))
+        val13 = -((k * (x1 - x2 - y1 + y2) * (x2 - x3 - y2 + y3)) / (
+                2 * (x3 * (-y1 + y2) + x2 * (y1 - y3) + x1 * (-y2 + y3))))
+        val21 = val12
+        val22 = -((k * (x1 - x3 - y1 + y3) ** 2) / (2 * (x3 * (-y1 + y2) + x2 * (y1 - y3) + x1 * (-y2 + y3))))
+        val23 = (k * (x1 - x2 - y1 + y2) * (x1 - x3 - y1 + y3)) / (
+                2 * (x3 * (-y1 + y2) + x2 * (y1 - y3) + x1 * (-y2 + y3)))
+        val31 = val13
+        val32 = val23
+        val33 = -((k * (x1 - x2 - y1 + y2) ** 2) / (2 * (x3 * (-y1 + y2) + x2 * (y1 - y3) + x1 * (-y2 + y3))))
+        kmat = np.array([[val11, val12, val13], [val21, val22, val23], [val31, val32, val33]], dtype=np.single)
+
+        return kmat
+
+
+class CalcFEM:
+
+    def __init__(self, all_points_numbered, all_outline_vertices_numbered, boundaries_numbered, triangles):
+        self.all_points_numbered = all_points_numbered
+        self.all_outline_vertices_numbered = all_outline_vertices_numbered
+        self.boundaries_numbered = boundaries_numbered
+        self.triangles = triangles
+        self.all_points = np.array([elem[1] for elem in all_points_numbered])
+        self.polygon_outline_vertices = np.array([elem[1] for elem in all_outline_vertices_numbered])
+        self.k = 0.5  # todo, test
+        self.zuordtab = triangles
+        self.maxnode = len(self.all_points)
+        self.syssteifarray = None
+        self.solution = None
+
+    def get_counter_clockwise_triangle(self, nodes: list):
+        """
+        rearanges the nodes, so that they are counter clockwise
+        TODO: IST DAS NOTWENIG????
+        :param nodes:
+        :return:
+        """
+        x1 = nodes[0][0]
+        y1 = nodes[0][1]
+        x2 = nodes[1][0]
+        y2 = nodes[1][1]
+        new_nodes = [nodes[0]]
+        if x2 < x1:
+            new_nodes.append(nodes[2])
+            new_nodes.append(nodes[1])
+        elif x2 == x1:
+            if y2 < y1:
+                new_nodes.append(nodes[1])
+                new_nodes.append(nodes[2])
+            else:
+                new_nodes.append(nodes[2])
+                new_nodes.append(nodes[1])
+        elif x2 > x1:
+            new_nodes.append(nodes[1])
+            new_nodes.append(nodes[2])
+        return new_nodes
+
+    def calc_elementmatrices(self):
+        self.nbr_of_elements = len(self.triangles)
+
+        self.all_element_matrices = np.zeros((self.nbr_of_elements, 3, 3), dtype=np.single)
+
+        for idx, triangle in enumerate(self.triangles):
+            p1, p2, p3 = triangle[0], triangle[1], triangle[2]
+            x1 = self.all_points[p1][0]
+            y1 = self.all_points[p1][1]
+            x2 = self.all_points[p2][0]
+            y2 = self.all_points[p2][1]
+            x3 = self.all_points[p3][0]
+            y3 = self.all_points[p3][1]
+            nodes = [[x1, y1], [x2, y2], [x3, y3]]
+            elemmatrix = ElementMatrice.calc_2d_triangulat_heatflow(self.k, nodes)
+            self.all_element_matrices[idx] = elemmatrix
+
+    def calc_force_vector(self):
+        self.lastvektor = np.zeros(self.maxnode, dtype=np.single)
+        self.lastvektor[0] = 0.00001
+
+    def calc_system_matrices(self):
+        self.syssteifarray = np.zeros((self.maxnode, self.maxnode), dtype=np.single)
+
+        for ielem in range(self.nbr_of_elements):
+            elesteifmat = self.all_element_matrices[ielem]
+            for a in range(3):
+                for b in range(3):
+                    zta = int(self.zuordtab[ielem, a])
+                    ztb = int(self.zuordtab[ielem, b])
+                    self.syssteifarray[zta, ztb] = self.syssteifarray[zta, ztb] + elesteifmat[a, b]
+
+    def implement_diriclet(self, sysmatrix, forcevector, diriclet_list):
+
+        diriclet_list_positions = [pos[0] for pos in diriclet_list]
+        diriclet_list_values = [pos[1] for pos in diriclet_list]
+        original_sysmatrix = np.copy(sysmatrix)
+
+        # sysmatrix
+        for position, value in diriclet_list:
+            sysmatrix[:, position] = 0
+            sysmatrix[position, :] = 0
+            sysmatrix[position, position] = 1
+
+        # force vector
+        forcevector = forcevector - np.dot(original_sysmatrix[:, diriclet_list_positions], diriclet_list_values)
+        for pos, value in diriclet_list:
+            forcevector[pos] = value
+
+        return sysmatrix, forcevector
+
+    def print_matrix(self, matrix):
+
+        if not isinstance(matrix[0], np.ndarray):
+            if len(matrix) < 50:
+                print("[", end='')
+                for idx, val in enumerate(matrix):
+                    if idx < len(matrix) - 1:
+                        print(f"+{abs(val):.2f}," if val >= 0 else f"-{abs(val):.2f},", end='')
+                    else:
+                        print(f"+{abs(val):.2f}" if val >= 0 else f"-{abs(val):.2f}", end='')
+                print("]")
+
+        else:
+            if len(matrix) < 50:
+                print("[", end='\n')
+                for idx, elem in enumerate(matrix):
+                    print("[", end='')
+                    for idy, val in enumerate(elem):
+                        if val == 0:
+                            val_str = '_____'
+                        else:
+                            val_str = f"+{abs(val):.2f}" if val >= 0 else f"-{abs(val):.2f}"
+                        if idy < len(elem) - 1:
+                            print(f"{val_str},", end='')
+                        elif idy >= len(elem) - 1 and idx < len(matrix) - 1:
+                            print(f"{val_str}],", end='\n')
+                        else:
+                            print(f"{val_str}]", end='\n')
+                print("]")
+
+    def solve_linear_system(self):
+        if self.syssteifarray is not None:  # since it might be a np.array
+            self.solution = np.linalg.solve(self.syssteifarray, self.lastvektor)
+
+    def plot_solution(self):
+
+        solutionallnodes = np.zeros((self.maxnode, 3))
+        for i in range(self.maxnode):
+            solutionallnodes[i, 0] = self.all_points[i, 0]
+            solutionallnodes[i, 1] = self.all_points[i, 1]
+        datax = solutionallnodes[:, 0]
+        datay = solutionallnodes[:, 1]
+        dataz = np.real(self.solution)
+
+        minx = min(datax)
+        maxx = max(datax)
+        miny = min(datay)
+        maxy = max(datay)
+
+        points = solutionallnodes[:, (0, 1)]
+        values = dataz
+        grid_x, grid_y = np.mgrid[minx:maxx:600j, miny:maxy:600j]
+        grid_z1 = griddata(points, values, (grid_x, grid_y), method='linear')
+
+        # Contourplot
+        nr_of_contours = 100  # Contouren insgesamt, hoher Wert für Quasi-Densityplot
+        nr_of_contourlines = 5  # EIngezeichnete Contourlinien, Wert nicht exakt...
+        aspectxy = 1
+        ctlines = int(nr_of_contours / nr_of_contourlines)
+
+        dataX = grid_x
+        dataY = grid_y
+        dataZ = grid_z1
+
+        # fig1, ax = plt.subplots()
+        # CS1 = ax.contourf(dataX, dataY, dataZ, nr_of_contours, cmap=plt.cm.gnuplot2)
+        # ax.set_title('Temperature field')
+        # ax.set_xlabel('x [m]')
+        # ax.set_ylabel('y [m]')
+        # ax.set_aspect(aspectxy)
+        #
+        # divider = make_axes_locatable(ax)
+        # cax = divider.append_axes("right", size="5%", pad=0.2)
+        # cbar = fig1.colorbar(CS1, cax=cax)
+        # cbar.ax.set_ylabel('Temp [T]')
+        #
+        # plt.scatter(self.polygon_outline_vertices[:, 0], self.polygon_outline_vertices[:, 1], c='b', marker='o',
+        #             label='Boundary Points')
+        # plt.scatter(self.all_points[:, 0], self.all_points[:, 1], c='b', marker='.', label='Seed Points')
+        # plt.triplot(self.all_points[:, 0], self.all_points[:, 1], self.triangles, c='gray', label='Mesh')
+
+        triang_mpl = tri.Triangulation(self.all_points[:, 0], self.all_points[:, 1], self.triangles)
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.set_title('Temperature field')
+        ax.set_xlabel('x [m]')
+        ax.set_ylabel('y [m]')
+        ax.set_aspect(aspectxy)
+
+        contour = ax.tricontourf(triang_mpl, values, cmap='viridis', levels=20)
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.2)
+        cbar = fig.colorbar(contour, cax=cax)
+        cbar.ax.set_ylabel('Temp [T]')
+
+        scatter = ax.scatter(self.all_points[:, 0], self.all_points[:, 1], c=values, cmap='viridis', marker='.',
+                             edgecolors='w', s=10)
+        triplot = ax.triplot(triang_mpl, 'w-', linewidth=0.1)
+
+        plt.show()
+
+    def calc_fem(self):
+
+        boundary0 = self.boundaries_numbered[0]
+        boundary1 = self.boundaries_numbered[1]
+        boundarym1 = self.boundaries_numbered[-1]
+        value_boundary0 = 100
+        value_boundary1 = 75
+        value_boundarym1 = 50
+        boundary0_nodes = [(nbr[0], value_boundary0) for nbr in boundary0]
+        boundary1_nodes = [(nbr[0], value_boundary1) for nbr in boundary1]
+        boundarym1_nodes = [(nbr[0], value_boundarym1) for nbr in boundarym1]
+
+        all_diriclet = boundary0_nodes + boundary1_nodes + boundarym1_nodes
+
+        self.calc_elementmatrices()
+        self.calc_system_matrices()
+        self.calc_force_vector()
+
+        sysmatrix_adj, force_vector_adj = self.implement_diriclet(self.syssteifarray, self.lastvektor, all_diriclet)
+        self.syssteifarray = sysmatrix_adj
+        self.lastvektor = force_vector_adj
+
+        #self.print_matrix(self.syssteifarray)
+        #self.print_matrix(self.lastvektor)
+
+        self.solve_linear_system()
+        self.plot_solution()
+
 
 class CreateMesh:
     """
     Creates an array of mesh points and triangulation
     """
 
-
-    def __init__(self,polygon_vertices: np.array, density: float, method='uniform'):
+    def __init__(self, polygon_vertices: np.array, density: float, method='uniform'):
         """
         Initializes a Polygon object with the given polygon vertices and density.
 
         Args:
-        :param density: float, specifies distance between 2 points,
-                            floor is applied so line = [[0,0],[1,0]], density = 0.4
+        :param density: float, specifies distance between 2 points, floor is applied so line = [[0,0],[1,0]], density = 0.4
         returns 3 points instead of 4!
         :param polygon: np.array([
                             [x_coord0, y_coord0],
@@ -44,9 +310,7 @@ class CreateMesh:
                             [x_coord2, y_coord2],
                             ...,
                             [x_coord0, y_coord0]]) # Last vertice has to be first vertice!
-        :param method: optional,    'random' for random generation,
-                                    'uniform' for equal distance or
-                                    'randomuniform' for approx uniform
+        :param method: optional, 'random' for random generation, 'uniform' for equal distance or 'randomuniform' for approx uniform
 
         Raises:
             ValueError
@@ -60,9 +324,8 @@ class CreateMesh:
         self.polygon_outline_vertices = None
         self.triangles = None
         self.meshcreated = False
-        #if not np.array_equal(self.polygon[0], self.polygon[-1]):
-        #    raise ValueError(f"First vertice has to be equal to last vertice: {self.polygon[0]} != {self.polygon[-1]}")
-
+        if not np.array_equal(self.polygon[0], self.polygon[-1]):
+            raise ValueError(f"First vertice has to be equal to last vertice: {self.polygon[0]} != {self.polygon[-1]}")
 
     def check_vertice(self, point: np.array) -> bool:
         """
@@ -78,7 +341,6 @@ class CreateMesh:
 
         return is_inside
 
-
     def check_vertice_polygon(self, point: np.array, polygon: np.array) -> bool:
         """
         Checks if a given point is inside the given polygon:
@@ -92,7 +354,6 @@ class CreateMesh:
         is_inside = polygon_path.contains_point(point)
 
         return is_inside
-
 
     def create_line_vertices(self, line: np.array) -> np.array:
         """
@@ -118,16 +379,35 @@ class CreateMesh:
         """
         if not np.array_equal(self.polygon[0], self.polygon[-1]):
             raise ValueError(f"First vertice has to be equal to last vertice: {self.polygon[0]} != {self.polygon[-1]}")
+
         outline_vertices = None
+
+        boundaries = list()
+        n_point = 0
         for nv, start_point in enumerate(self.polygon[:-1]):
             end_point = self.polygon[nv + 1]
             line = np.array([start_point, end_point])
             if nv == 0:
                 outline_vertices = self.create_line_vertices(line)[:-1]
+                boundary_points = list()
+                for vertice in outline_vertices:
+                    boundary_points.append([n_point, vertice])
+                    n_point += 1
+                boundaries.append(boundary_points)
             else:
-                outline_vertices = np.append(outline_vertices, self.create_line_vertices(line)[:-1], axis=0)
+                this_boundary = self.create_line_vertices(line)[:-1]
+                boundary_points = list()
+                for vertice in this_boundary:
+                    boundary_points.append([n_point, vertice])
+                    n_point += 1
+                boundaries.append(boundary_points)
+                outline_vertices = np.append(outline_vertices, this_boundary, axis=0)
 
-        return outline_vertices
+        boundaries_numbered = boundaries
+        all_outline_vertices_numbered = [[n_point, outline_vertices[n_point]] for n_point in
+                                         range(len(outline_vertices))]
+
+        return all_outline_vertices_numbered, boundaries_numbered
 
     def get_min_max_values(self) -> np.array:
         """
@@ -190,7 +470,6 @@ class CreateMesh:
 
         return rect_seed_points
 
-
     def draw_quadrilateral(self, corners: np.array):
         """
         For testing purposes
@@ -199,7 +478,6 @@ class CreateMesh:
         plt.scatter(corners[:, 0], corners[:, 1], c='b', marker='x', label='Corners')
         plt.show()
 
-
     def check_vertice_outline(self, point: np.array) -> bool:
         # TODO: if in proximity (tolerance) of corner point of polygon
         """
@@ -207,17 +485,17 @@ class CreateMesh:
         :param point: np.array([x_coord0, y_coord0])
         :return: bool
         """
-        tolerance = self.density/2
+        tolerance = self.density / 2
         point_on_line = False
         for nv, start_point in enumerate(self.polygon[:-1]):
             end_point = self.polygon[nv + 1]
             direction_vector = end_point - start_point
             normal_vector = np.array([-direction_vector[1], direction_vector[0]])
             normal_vector = normal_vector / np.linalg.norm(normal_vector)
-            third_point_new_rect = np.array([(start_point[0] + tolerance * normal_vector[0]),
-                                             (start_point[1] + tolerance * normal_vector[1])])
-            fourth_point_new_rect = np.array([(end_point[0] + tolerance * normal_vector[0]),
-                                              (end_point[1] + tolerance * normal_vector[1])])
+            third_point_new_rect = np.array(
+                [(start_point[0] + tolerance * normal_vector[0]), (start_point[1] + tolerance * normal_vector[1])])
+            fourth_point_new_rect = np.array(
+                [(end_point[0] + tolerance * normal_vector[0]), (end_point[1] + tolerance * normal_vector[1])])
             check_polygon = np.array([start_point, end_point, fourth_point_new_rect, third_point_new_rect, start_point])
             is_on_line = self.check_vertice_polygon(point, check_polygon)
             if is_on_line:
@@ -233,6 +511,9 @@ class CreateMesh:
         Nothing
         :return: np.array
         """
+
+        all_outline_vertices_numbered, boundaries_numbered = self.create_polygon_outline_vertices()
+
         rect_min_max_coords = self.get_min_max_values()
         rect_seed_points = self.get_seed_rectangle(rect_min_max_coords)
 
@@ -242,10 +523,17 @@ class CreateMesh:
                 if not self.check_vertice_outline(point):
                     keep_points.append(idn)
         filtered_seed_points = rect_seed_points[keep_points]
-        polygon_outline_vertices = self.create_polygon_outline_vertices()
-        all_points = np.append(filtered_seed_points, polygon_outline_vertices, axis=0)
+        last_point_polygon_outline_vertice = all_outline_vertices_numbered[-1][0] + 1
+        nbr_of_filtered_seed_points = len(filtered_seed_points)
+        maxnode = last_point_polygon_outline_vertice + nbr_of_filtered_seed_points
+        filtered_seed_points_numbered = [[n_point, filtered_seed_points[n_point - last_point_polygon_outline_vertice]]
+                                         for n_point in range(last_point_polygon_outline_vertice, maxnode)]
 
-        return all_points
+        polygon_outline_vertices = [elem[1] for elem in all_outline_vertices_numbered]
+        all_points = np.append(polygon_outline_vertices, filtered_seed_points, axis=0)
+        all_points_numbered = all_outline_vertices_numbered + filtered_seed_points_numbered
+
+        return all_points, all_points_numbered, all_outline_vertices_numbered, boundaries_numbered
 
     def show_mesh(self):
         """
@@ -255,10 +543,11 @@ class CreateMesh:
         :param triangles:
         :return:
         """
+        polygon_outline_vertices = np.array(self.polygon_outline_vertices)
         if not self.meshcreated:
             print(f"Run create_mesh() first!")
         else:
-            plt.scatter(self.polygon_outline_vertices[:, 0], self.polygon_outline_vertices[:, 1], c='b', marker='o',
+            plt.scatter(polygon_outline_vertices[:, 0], polygon_outline_vertices[:, 1], c='b', marker='o',
                         label='Boundary Points')
             plt.scatter(self.all_points[:, 0], self.all_points[:, 1], c='b', marker='.', label='Seed Points')
             plt.triplot(self.all_points[:, 0], self.all_points[:, 1], self.triangles, c='gray', label='Mesh')
@@ -268,7 +557,6 @@ class CreateMesh:
             plt.legend()
             plt.title('Mesh generation in Polygon')
             plt.show()
-
 
     def output_mesh_param(self):
         """
@@ -286,8 +574,11 @@ class CreateMesh:
         else:
             print("Too many elements, printing would be unwise...")
 
-
     def write_output(self):
+        """
+        todo
+        :return:
+        """
         output_to_write = ''
         output_to_write += 'Coordinates of nodes\n'
         for idp, point in enumerate(self.all_points):
@@ -298,7 +589,6 @@ class CreateMesh:
         with open('output.txt', 'w') as f:
             f.write(output_to_write)
 
-
     def create_mesh(self):
         """
         todo:
@@ -307,13 +597,8 @@ class CreateMesh:
         :param method:
         :return:
         """
-
-        all_points = self.get_seed_polygon()
-
-        # remove duplicates
-        all_points = np.unique(all_points, axis=0)
-
-        polygon_outline_vertices = self.create_polygon_outline_vertices()
+        all_points, all_points_numbered, all_outline_vertices_numbered, boundaries_numbered = self.get_seed_polygon()
+        polygon_outline_vertices = [elem[1] for elem in all_outline_vertices_numbered]
 
         # Triangulation
         triangulation = Delaunay(all_points)
@@ -334,11 +619,9 @@ class CreateMesh:
         self.polygon_outline_vertices = polygon_outline_vertices
         self.triangles = triangles_filtered
         self.meshcreated = True
+        # self.output_mesh_param() # prints output
 
-        self.output_mesh_param()
-        self.write_output()
-
-        return all_points, polygon_outline_vertices, self.triangles
+        return all_points_numbered, all_outline_vertices_numbered, boundaries_numbered, self.triangles
 
 
 class FEMGUI:
@@ -347,14 +630,39 @@ class FEMGUI:
         self.polygon_coordinates = [[0, 600]]
         self.firstclick_canvas = True
         self.polygon_closed = False
+        self.mesh = None
+        self.calcfem = None
+        self.click_counter = 0 # counts clicks in canvas
+
+        # FEM Data
+        self.all_points_numbered = None
+        self.all_outline_vertices_numbered = None
+        self.boundaries_numbered = None
+        self.triangles = None
 
     def finish_polygon_coordinates(self):
+
         self.polygon_closed = True
         self.polygon_coordinates.append([0, 600])
+
+        # create closing line
         self.canvas.create_line(self.polygon_coordinates[-2][0], self.polygon_coordinates[-2][1],
                                 self.polygon_coordinates[-1][0], self.polygon_coordinates[-1][1],
                                 fill="black", width=LINEWIDTH)
-        print(self.polygon_coordinates)
+
+        # create last boundary marker
+        self.click_counter += 1
+        boundary_text = f"B-{self.click_counter}"
+        x1 = self.polygon_coordinates[-2][0]
+        y1 = self.polygon_coordinates[-2][1]
+        x2 = self.polygon_coordinates[-1][0]
+        y2 = self.polygon_coordinates[-1][1]
+        center_point = ((x1 + x2) / 2, (y1 + y2) / 2)
+        center_x, center_y = center_point
+        self.canvas.create_oval(center_x - 15, center_y - 15, center_x + 15, center_y + 15, outline="black",
+                                fill="white")
+        self.canvas.create_text(center_x, center_y, text=boundary_text, fill="blue", font=("Helvetica", 11))
+        #print(self.polygon_coordinates)
 
     def add_grid(self):
         for x in range(0, CANVAS_WIDTH + GRIDSPACE, GRIDSPACE):
@@ -380,30 +688,33 @@ class FEMGUI:
             new_y = grid_y[div_y + 1]
         return new_x, new_y
 
-
     def coord_transform(self):
-        scale_factor = 0.01 # todo
-        polygon_coordinates_transformed = [[scale_factor * elem[0],-1 * scale_factor * (elem[1] - 600)]
+        scale_factor = 0.01  # todo
+        polygon_coordinates_transformed = [[scale_factor * elem[0], -1 * scale_factor * (elem[1] - 600)]
                                            for elem in self.polygon_coordinates]
         polygon_coordinates_transformed = [[elem[0], 0 if elem[1] == -0 else elem[1]]
                                            for elem in polygon_coordinates_transformed]
         return polygon_coordinates_transformed
 
-
     def create_mesh(self):
         method = self.methods_dropdown_var.get()
         density_un = self.density_slider.get()
-        density = 1/density_un
+        density = 1 / density_un
         polygon_coordinates_transformed = self.coord_transform()
         polygon_vertices = np.array(polygon_coordinates_transformed)
         self.mesh = CreateMesh(polygon_vertices, density, method)
-        self.mesh.create_mesh()
+        self.all_points_numbered, self.all_outline_vertices_numbered, self.boundaries_numbered, self.triangles = self.mesh.create_mesh()
         self.mesh.show_mesh()
+        self.calcfem = CalcFEM(self.all_points_numbered, self.all_outline_vertices_numbered, self.boundaries_numbered,
+                               self.triangles)
+
 
     def create_output(self):
         ...
 
-
+    def calc_fem_main(self):
+        if self.calcfem is not None:
+            self.calcfem.calc_fem()
 
     def on_canvas_click(self, event):
         # Get coordinates of right click
@@ -414,15 +725,43 @@ class FEMGUI:
         self.polygon_coordinates_str.set(self.polygon_coordinates_tmp)
         self.polygon_coordinates.append([x, y])
         self.polygon_coordinates_tmp += f"[{x},{y}]  "
+
         # create lines between points
         if self.firstclick_canvas == True:
             self.firstclick_canvas = False
             self.canvas.create_line(0, CANVAS_HEIGHT, x, y, fill="black", width=LINEWIDTH)
-
         if 'prevpoint' in FEMGUI.on_canvas_click.__dict__ and not self.firstclick_canvas:
             self.canvas.create_line(FEMGUI.on_canvas_click.prevpoint[0], FEMGUI.on_canvas_click.prevpoint[1], x, y,
                                     fill="black", width=LINEWIDTH)
-        FEMGUI.on_canvas_click.prevpoint = (x,y) # TODO: Why does this not work with self????
+
+        # get centerpoint of line and create text
+        if 'prevpoint' in FEMGUI.on_canvas_click.__dict__:
+            self.click_counter += 1
+            boundary_text = f"B-{self.click_counter}"
+            x1 = FEMGUI.on_canvas_click.prevpoint[0]
+            y1 = FEMGUI.on_canvas_click.prevpoint[1]
+            x2 = x
+            y2 = y
+            center_point = ((x1 + x2) / 2, (y1 + y2) / 2)
+            center_x, center_y = center_point
+            self.canvas.create_oval(center_x - 15, center_y - 15, center_x + 15, center_y + 15, outline="black", fill="white")
+            self.canvas.create_text(center_x, center_y, text=boundary_text, fill="blue", font=("Helvetica", 11))
+        else:
+            boundary_text = f"B-{self.click_counter}"
+            x1 = 0
+            y1 = 600
+            x2 = x
+            y2 = y
+            center_point = ((x1 + x2) / 2, (y1 + y2) / 2)
+            center_x, center_y = center_point
+            self.canvas.create_oval(center_x - 15, center_y - 15, center_x + 15, center_y + 15, outline="black",
+                                    fill="white")
+            self.canvas.create_text(center_x, center_y, text=boundary_text, fill="blue", font=("Helvetica", 11))
+
+        FEMGUI.on_canvas_click.prevpoint = (x, y)  # TODO: Why does this not work with self????
+
+        # create point at click
+        self.canvas.create_oval(x - DOTSIZE, y - DOTSIZE, x + DOTSIZE, y + DOTSIZE, outline="black", fill="#851d1f")
 
         # Clear content
         self.coord_var_x.set('0')
@@ -432,7 +771,8 @@ class FEMGUI:
         self.coord_var_x.set(f"{x}")
         self.coord_var_y.set(f"{y}")
 
-        self.canvas.create_oval(x - DOTSIZE, y - DOTSIZE, x + DOTSIZE, y + DOTSIZE, outline="black", fill="#851d1f")
+
+
 
 
     def start(self):
@@ -443,7 +783,7 @@ class FEMGUI:
 
         # Canvas widget for setting nodes of polygon
         self.canvas = tk.Canvas(root, width=CANVAS_WIDTH, height=CANVAS_HEIGHT, bg="gray")
-        self.canvas.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH, rely=BORDER_WIDTH)
+        self.canvas.place(relx=1 - (CANVAS_WIDTH / WINDOWS_WIDTH) - BORDER_WIDTH, rely=BORDER_WIDTH)
         self.canvas.bind("<Button-1>", self.on_canvas_click)
         # set initial node
         self.canvas.create_oval(0 - DOTSIZE, CANVAS_HEIGHT - DOTSIZE, 0 + DOTSIZE, CANVAS_HEIGHT + DOTSIZE,
@@ -461,78 +801,81 @@ class FEMGUI:
         # Dynamic display coordinates last click
         coord_entry_width = 6
         coord_label = tk.Label(root, text="Coordinates:", font=("Arial", 12))
-        coord_label.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH,
-                          rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT))
+        coord_label.place(relx=1 - (CANVAS_WIDTH / WINDOWS_WIDTH) - BORDER_WIDTH,
+                          rely=2 * BORDER_WIDTH + (CANVAS_HEIGHT / WINDOW_HEIGHT))
         coord_label_x = tk.Label(root, text="X:", font=("Arial", 12))
-        coord_label_x.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.075,
-                            rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT))
+        coord_label_x.place(relx=1 - (CANVAS_WIDTH / WINDOWS_WIDTH) - BORDER_WIDTH + 0.075,
+                            rely=2 * BORDER_WIDTH + (CANVAS_HEIGHT / WINDOW_HEIGHT))
         coord_label_y = tk.Label(root, text="Y:", font=("Arial", 12))
-        coord_label_y.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.15,
-                            rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT))
+        coord_label_y.place(relx=1 - (CANVAS_WIDTH / WINDOWS_WIDTH) - BORDER_WIDTH + 0.15,
+                            rely=2 * BORDER_WIDTH + (CANVAS_HEIGHT / WINDOW_HEIGHT))
 
         coord_entry_x = tk.Entry(root, textvariable=self.coord_var_x, font=("Arial", 12),
                                  width=coord_entry_width, justify='left')
-        coord_entry_x.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.095,
-                            rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT))
+        coord_entry_x.place(relx=1 - (CANVAS_WIDTH / WINDOWS_WIDTH) - BORDER_WIDTH + 0.095,
+                            rely=2 * BORDER_WIDTH + (CANVAS_HEIGHT / WINDOW_HEIGHT))
         coord_entry_y = tk.Entry(root, textvariable=self.coord_var_y, font=("Arial", 12),
                                  width=coord_entry_width, justify='left')
-        coord_entry_y.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.168,
-                            rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT))
+        coord_entry_y.place(relx=1 - (CANVAS_WIDTH / WINDOWS_WIDTH) - BORDER_WIDTH + 0.168,
+                            rely=2 * BORDER_WIDTH + (CANVAS_HEIGHT / WINDOW_HEIGHT))
 
         coord_set_label = tk.Label(root, text="All polygon vertices:", font=("Arial", 12))
-        coord_set_label.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH,
-                              rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT)+0.05)
+        coord_set_label.place(relx=1 - (CANVAS_WIDTH / WINDOWS_WIDTH) - BORDER_WIDTH,
+                              rely=2 * BORDER_WIDTH + (CANVAS_HEIGHT / WINDOW_HEIGHT) + 0.05)
         polygon_coordinates = tk.Entry(root, textvariable=self.polygon_coordinates_str,
                                        state='readonly', font=("Arial", 12), width=100, justify='left')
-        polygon_coordinates.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.115,
-                                  rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT)+0.05)
+        polygon_coordinates.place(relx=1 - (CANVAS_WIDTH / WINDOWS_WIDTH) - BORDER_WIDTH + 0.115,
+                                  rely=2 * BORDER_WIDTH + (CANVAS_HEIGHT / WINDOW_HEIGHT) + 0.05)
 
         # finish polyon entry of coordinates
         finish_coord_entry_button = tk.Button(root, text="Close Polygon",
                                               command=self.finish_polygon_coordinates, font=("Arial", 13))
-        finish_coord_entry_button.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.775,
-                                        rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT)+0.05)
+        finish_coord_entry_button.place(relx=1 - (CANVAS_WIDTH / WINDOWS_WIDTH) - BORDER_WIDTH + 0.775,
+                                        rely=2 * BORDER_WIDTH + (CANVAS_HEIGHT / WINDOW_HEIGHT) + 0.05)
 
         # create mesh button
         create_mesh_button = tk.Button(root, text="Create Mesh", command=self.create_mesh, font=("Arial", 13))
-        create_mesh_button.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.775,
-                                 rely=2*BORDER_WIDTH + (CANVAS_HEIGHT/WINDOW_HEIGHT)+0.105)
+        create_mesh_button.place(relx=1 - (CANVAS_WIDTH / WINDOWS_WIDTH) - BORDER_WIDTH + 0.775,
+                                 rely=2 * BORDER_WIDTH + (CANVAS_HEIGHT / WINDOW_HEIGHT) + 0.105)
 
         # add slider for selecting density and dropdown option menu for method
-        self.density_slider = tk.Scale(root, from_=1, to=100, orient=tk.HORIZONTAL,
+        self.density_slider = tk.Scale(root, from_=1, to=10, orient=tk.HORIZONTAL,
                                        label="Density", font=("Arial", 12))
-        self.density_slider.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH, rely=0.85)
+        self.density_slider.place(relx=1 - (CANVAS_WIDTH / WINDOWS_WIDTH) - BORDER_WIDTH, rely=0.85)
 
         methods_label = tk.Label(root, text="Mesh Method:", font=("Arial", 12))
-        methods_label.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.1,
-                              rely=0.85)
+        methods_label.place(relx=1 - (CANVAS_WIDTH / WINDOWS_WIDTH) - BORDER_WIDTH + 0.1,
+                            rely=0.85)
         methods = ['uniform', 'random', 'randomuniform']
         self.methods_dropdown_var = tk.StringVar()
-        self.methods_dropdown_var.set(methods[0])  # default value
+        self.methods_dropdown_var.set(methods[2])  # default value
         dropdown_menu = tk.OptionMenu(root, self.methods_dropdown_var, *methods)
-        dropdown_menu.place(relx=1-(CANVAS_WIDTH/WINDOWS_WIDTH)-BORDER_WIDTH+0.1, rely=0.90)
+        dropdown_menu.place(relx=1 - (CANVAS_WIDTH / WINDOWS_WIDTH) - BORDER_WIDTH + 0.1, rely=0.90)
 
         # output to file
-        write_file_button = tk.Button(root, text="Write Mesh to File", command=self.create_output(), font=("Arial", 13))
+        write_file_button = tk.Button(root, text="Write Mesh to File", command=self.create_output, font=("Arial", 13))
         write_file_button.place(relx=0.4, rely=0.85)
+
+        # FEM button
+        calc_fem_button = tk.Button(root, text="Calculate FEM", command=self.calc_fem_main, font=("Arial", 13))
+        calc_fem_button.place(relx=0.55, rely=0.85)
+
+        # Boundary conditions WIP
+        tmp_boundaries = tk.Label(root, text="Boundary conditions:\nWIP!\nBoundary[0] = 100\nBoundary[1] = 75\nBoundary[-1] = 50", font=("Arial", 10))
+        tmp_boundaries.place(relx=0.65,
+                          rely=0.85)
 
         # add grid
         self.add_grid()
 
-
         # Run the Tkinter main loop
         root.mainloop()
-
 
 
 def main():
     density = 0.05
     start = FEMGUI()
     start.start()
-
-
-
-
 
 
 if __name__ == "__main__":
