@@ -11,6 +11,9 @@ import math
 from scipy.interpolate import griddata
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import matplotlib.tri as tri
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from tkinter import ttk
+import datetime
 
 #################################################
 # tkinter static parameters
@@ -71,11 +74,13 @@ class ElementMatrice:
 
 class CalcFEM:
 
-    def __init__(self, all_points_numbered, all_outline_vertices_numbered, boundaries_numbered, triangles):
+    def __init__(self, all_points_numbered, all_outline_vertices_numbered, boundaries_numbered, triangles, boundary_values):
         self.all_points_numbered = all_points_numbered
         self.all_outline_vertices_numbered = all_outline_vertices_numbered
         self.boundaries_numbered = boundaries_numbered
         self.triangles = triangles
+        self.boundary_values = boundary_values
+
         self.all_points = np.array([elem[1] for elem in all_points_numbered])
         self.polygon_outline_vertices = np.array([elem[1] for elem in all_outline_vertices_numbered])
         self.k = 0.5  # todo, test
@@ -83,6 +88,7 @@ class CalcFEM:
         self.maxnode = len(self.all_points)
         self.syssteifarray = None
         self.solution = None
+
 
     def get_counter_clockwise_triangle(self, nodes: list):
         """
@@ -245,7 +251,7 @@ class CalcFEM:
 
         triang_mpl = tri.Triangulation(self.all_points[:, 0], self.all_points[:, 1], self.triangles)
 
-        fig, ax = plt.subplots(figsize=(8, 6))
+        fig, ax = plt.subplots(figsize=(12, 8))
         ax.set_title('Temperature field')
         ax.set_xlabel('x [m]')
         ax.set_ylabel('y [m]')
@@ -261,21 +267,15 @@ class CalcFEM:
                              edgecolors='w', s=10)
         triplot = ax.triplot(triang_mpl, 'w-', linewidth=0.1)
 
-        plt.show()
+        return fig, ax
 
     def calc_fem(self):
 
-        boundary0 = self.boundaries_numbered[0]
-        boundary1 = self.boundaries_numbered[1]
-        boundarym1 = self.boundaries_numbered[-1]
-        value_boundary0 = 100
-        value_boundary1 = 75
-        value_boundarym1 = 50
-        boundary0_nodes = [(nbr[0], value_boundary0) for nbr in boundary0]
-        boundary1_nodes = [(nbr[0], value_boundary1) for nbr in boundary1]
-        boundarym1_nodes = [(nbr[0], value_boundarym1) for nbr in boundarym1]
-
-        all_diriclet = boundary0_nodes + boundary1_nodes + boundarym1_nodes
+        all_diriclet = []
+        for boundary_number, boundary_value in self.boundary_values.items():
+            this_boundary = self.boundaries_numbered[boundary_number]
+            boundary_node_numbers_value = [(nbr[0], boundary_value) for nbr in this_boundary]
+            all_diriclet += boundary_node_numbers_value
 
         self.calc_elementmatrices()
         self.calc_system_matrices()
@@ -289,8 +289,9 @@ class CalcFEM:
         #self.print_matrix(self.lastvektor)
 
         self.solve_linear_system()
-        self.plot_solution()
+        #self.plot_solution()
 
+        return self.solution
 
 class CreateMesh:
     """
@@ -547,6 +548,7 @@ class CreateMesh:
         if not self.meshcreated:
             print(f"Run create_mesh() first!")
         else:
+            fig, ax = plt.subplots(figsize=(8, 6))
             plt.scatter(polygon_outline_vertices[:, 0], polygon_outline_vertices[:, 1], c='b', marker='o',
                         label='Boundary Points')
             plt.scatter(self.all_points[:, 0], self.all_points[:, 1], c='b', marker='.', label='Seed Points')
@@ -556,7 +558,10 @@ class CreateMesh:
             plt.ylabel('Y')
             plt.legend()
             plt.title('Mesh generation in Polygon')
-            plt.show()
+
+            #plt.show()
+            return fig, ax
+
 
     def output_mesh_param(self):
         """
@@ -633,12 +638,14 @@ class FEMGUI:
         self.mesh = None
         self.calcfem = None
         self.click_counter = 0 # counts clicks in canvas
+        self.boundaries_set = None
 
         # FEM Data
         self.all_points_numbered = None
         self.all_outline_vertices_numbered = None
         self.boundaries_numbered = None
         self.triangles = None
+        self.boundary_values = dict()
 
     def finish_polygon_coordinates(self):
 
@@ -694,6 +701,8 @@ class FEMGUI:
                                            for elem in self.polygon_coordinates]
         polygon_coordinates_transformed = [[elem[0], 0 if elem[1] == -0 else elem[1]]
                                            for elem in polygon_coordinates_transformed]
+        self.polygon_coordinates_transformed = polygon_coordinates_transformed
+
         return polygon_coordinates_transformed
 
     def create_mesh(self):
@@ -702,19 +711,77 @@ class FEMGUI:
         density = 1 / density_un
         polygon_coordinates_transformed = self.coord_transform()
         polygon_vertices = np.array(polygon_coordinates_transformed)
+
+        start_time = datetime.datetime.now()
         self.mesh = CreateMesh(polygon_vertices, density, method)
+        end_time = datetime.datetime.now()
+        elased_time = end_time - start_time
+
         self.all_points_numbered, self.all_outline_vertices_numbered, self.boundaries_numbered, self.triangles = self.mesh.create_mesh()
-        self.mesh.show_mesh()
-        self.calcfem = CalcFEM(self.all_points_numbered, self.all_outline_vertices_numbered, self.boundaries_numbered,
-                               self.triangles)
+        fig, ax = self.mesh.show_mesh()
+
+        # create new window
+        stats_nbr_of_nodes = len(self.all_points_numbered)
+        stats_nbr_of_elements = len(self.triangles)
+        stats_nbrs_of_boundaries = len(self.boundaries_numbered)
+        stats_calculation_time_mesh = elased_time.total_seconds()
+
+        stats_string = f"Stats:\n" \
+                       f"Number of Nodes: {stats_nbr_of_nodes}\n" \
+                       f"Number of Elements: {stats_nbr_of_elements}\n" \
+                       f"Number of Boundaries: {stats_nbrs_of_boundaries}\n"
+
+        polygon_transformed_values_x_max = max([point[0] for point in self.polygon_coordinates_transformed])
+        polygon_transformed_values_y_min = min([point[1] for point in self.polygon_coordinates_transformed])
+
+        top = tk.Toplevel(self.root)
+        top.title("Generated Mesh")
+        canvas = FigureCanvasTkAgg(fig, master=top)
+        canvas.get_tk_widget().pack()
+        text = ax.text(polygon_transformed_values_x_max * 0.75, polygon_transformed_values_y_min * 1.00, stats_string,
+                       fontsize=8, ha='left')
+
+
+    def clean_canvas(self, canvas):
+        all_canvas_elements = canvas.find_all()
+        for elem in all_canvas_elements:
+            canvas.delete(elem)
 
 
     def create_output(self):
         ...
 
     def calc_fem_main(self):
-        if self.calcfem is not None:
-            self.calcfem.calc_fem()
+        if not self.boundaries_set or not self.mesh: # TODO...autoclose of polygon oder so
+            warning_window = tk.Toplevel(self.root)
+            warning_window.title("Warning")
+            warning_label = tk.Label(warning_window, text="Warning: Create Mesh / set boundary conditions first!", padx=20, pady=20, font=("Arial", 12), foreground='red')
+            warning_label.pack()
+            return ''
+
+        self.calcfem = CalcFEM(self.all_points_numbered, self.all_outline_vertices_numbered,
+                               self.boundaries_numbered, self.triangles, self.boundary_values)
+        self.solution = self.calcfem.calc_fem()
+        self.show_fem_solution_window()
+
+    def show_fem_solution_window(self):
+
+        fig, ax = self.calcfem.plot_solution()
+        fem_stats_string = f"Boundary conditions:\n"
+
+        for boundary_nbr, value in self.boundary_values.items():
+            fem_stats_string += f"B-{boundary_nbr}: {value}\n"
+
+        polygon_transformed_values_x_max = max([point[0] for point in self.polygon_coordinates_transformed])
+        polygon_transformed_values_y_min = min([point[1] for point in self.polygon_coordinates_transformed])
+
+        fem_solution_window = tk.Toplevel(self.root)
+        fem_solution_window.title("FEM Solution")
+        fem_solution_window.geometry(f"{1200}x{800}")
+        canvas = FigureCanvasTkAgg(fig, master=fem_solution_window)
+        canvas.get_tk_widget().pack()
+        text = ax.text(polygon_transformed_values_x_max * 0.75, polygon_transformed_values_y_min * 1.00, fem_stats_string,
+                       fontsize=10, ha='left')
 
     def on_canvas_click(self, event):
         # Get coordinates of right click
@@ -772,12 +839,108 @@ class FEMGUI:
         self.coord_var_y.set(f"{y}")
 
 
+    def set_boundaries_window(self):
 
+        if not self.polygon_closed: # TODO...autoclose of polygon oder so
+            warning_window = tk.Toplevel(self.root)
+            warning_window.title("Warning")
+            warning_label = tk.Label(warning_window, text="Warning: Close Polygon first!",
+                                     padx=20, pady=20, font=("Arial", 12), foreground='red')
+            warning_label.pack()
+            return ''
+
+        def set_value():
+            selected_boundary = self.boundary_select_var.get()
+            selected_boundary = selected_boundary.split('B-')[-1]
+            value = self.boundary_value_entry.get()
+            self.boundary_values[int(selected_boundary)] = float(value)
+
+            input_boundary_str = ''
+            for boundary_nbr, value in self.boundary_values.items():
+                input_boundary_str += f"{boundary_nbr}: {value} ;"
+            self.input_boundary_str.set(input_boundary_str)
+
+
+
+        self.set_boundaries_window = tk.Toplevel(self.root)
+        self.set_boundaries_window.geometry(f"{300}x{300}")
+
+        # Select boundary
+        boundary_select_label = tk.Label(self.set_boundaries_window, text="Select Boundary", font=("Arial", 12))
+        boundary_select_label.place(relx=0.1, rely=0.1)
+        boundaries = [f"B-{elem}" for elem in range(len(self.polygon_coordinates) - 1)]
+        self.boundary_select_var = tk.StringVar()
+        self.boundary_select_var.set(boundaries[0])  # default value
+        self.dropdown_boundary_menu = tk.OptionMenu(self.set_boundaries_window, self.boundary_select_var, *boundaries)
+        self.dropdown_boundary_menu.place(relx=0.1, rely=0.2)
+
+        # select boundary type Placeholder - TODO: Not yet implemented
+        boundary_type_label = tk.Label(self.set_boundaries_window, text="Select Type", font=("Arial", 12))
+        boundary_type_label.place(relx=0.6, rely=0.1)
+        types = ['Dirichlet', 'Neumann', 'Robin']
+        self.boundary_type_var = tk.StringVar()
+        self.boundary_type_var.set(types[0])  # default value
+        self.dropdown_boundary_type_menu = tk.OptionMenu(self.set_boundaries_window, self.boundary_type_var, *types)
+        self.dropdown_boundary_type_menu.place(relx=0.6, rely=0.2)
+
+        # Input value
+        boundary_value_label = tk.Label(self.set_boundaries_window, text="Value", font=("Arial", 12))
+        boundary_value_label.place(relx=0.1, rely=0.3)
+        self.boundary_value_entry = tk.Entry(self.set_boundaries_window)
+        self.boundary_value_entry.place(relx=0.1, rely=0.4)
+
+        self.input_boundary_str = tk.StringVar()
+        self.input_boundary_str.set('None')
+        self.boundary_value_set_label = tk.Entry(self.set_boundaries_window, textvariable=self.input_boundary_str,
+                                                 state='readonly', font=("Arial", 10), width=30)
+        self.boundary_value_set_label.place(relx=0.1, rely=0.5)
+
+        # Apply value
+        self.set_value_button = tk.Button(self.set_boundaries_window, text="Set Value", command=set_value, font=("Arial", 12))
+        self.set_value_button.place(relx=0.6, rely=0.38)
+
+        # todo: on close
+        self.boundaries_set = True
+
+
+
+
+    def exit(self):
+        """
+        destroys mainwindow and closes programm
+        :return:
+        """
+        self.root.destroy()
+
+    def clear(self):
+        """
+        clears all values
+        :return:
+        """
+
+        self.clean_canvas(self.canvas)
+        self.add_grid()
+
+        self.polygon_coordinates = [[0, 600]]
+        self.firstclick_canvas = True
+        self.polygon_closed = False
+        self.mesh = None
+        self.calcfem = None
+        self.click_counter = 0
+        self.boundaries_set = None
+        self.all_points_numbered = None
+        self.all_outline_vertices_numbered = None
+        self.boundaries_numbered = None
+        self.triangles = None
+        self.boundary_values = dict()
+        self.polygon_coordinates_str.set(str(self.polygon_coordinates[0]))
+        FEMGUI.on_canvas_click.prevpoint = (0, 600)
 
 
     def start(self):
         # Start tkinter
         root = tk.Tk()
+        self.root = root
         root.title("Main")
         root.geometry(f"{WINDOWS_WIDTH}x{WINDOW_HEIGHT}")
 
@@ -857,19 +1020,29 @@ class FEMGUI:
         write_file_button.place(relx=0.4, rely=0.85)
 
         # FEM button
-        calc_fem_button = tk.Button(root, text="Calculate FEM", command=self.calc_fem_main, font=("Arial", 13))
+        calc_fem_button = tk.Button(root, text="Calculate FEM ", command=self.calc_fem_main, font=("Arial", 13))
         calc_fem_button.place(relx=0.55, rely=0.85)
 
-        # Boundary conditions WIP
-        tmp_boundaries = tk.Label(root, text="Boundary conditions:\nWIP!\nBoundary[0] = 100\nBoundary[1] = 75\nBoundary[-1] = 50", font=("Arial", 10))
-        tmp_boundaries.place(relx=0.65,
-                          rely=0.85)
+        # Set Boundaries button
+        set_boundaries_button = tk.Button(root, text="Set Boundaries", command=self.set_boundaries_window, font=("Arial", 13))
+        set_boundaries_button.place(relx=0.55, rely=0.9)
 
         # add grid
         self.add_grid()
 
+        # Clear button
+        clear_button = tk.Button(root, text="  CLEAR  ", command=self.clear, font=("Arial", 13))
+        clear_button.place(relx=0.05, rely=0.1)
+
+        # exit button
+        exit_button = tk.Button(root, text="  EXIT      ", command=self.exit, font=("Arial", 13))
+        exit_button.place(relx=0.05, rely=0.05)
+
         # Run the Tkinter main loop
         root.mainloop()
+
+
+
 
 
 def main():
