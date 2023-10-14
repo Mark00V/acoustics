@@ -71,6 +71,43 @@ class ElementMatrice:
 
         return kmat
 
+    @staticmethod
+    def calc_2d_triangulat_heatflow_new(conductivity: float, nodes: list):
+        """
+        precalculated element
+        :param conductivity: k
+        :param nodes: [[x1, y1],[x2, y2],[x3, y3]]
+        :return: np.array
+        """
+
+        x1 = nodes[0][0]
+        y1 = nodes[0][1]
+        x2 = nodes[1][0]
+        y2 = nodes[1][1]
+        x3 = nodes[2][0]
+        y3 = nodes[2][1]
+        k = conductivity
+
+        val11 = -((x2 - x3) ** 2 + (y1 - 2 * y2 + y3) ** 2) / (
+                    2 * (x3 * (-y1 + y2) + x2 * (y2 - y3) + x1 * (y1 - 2 * y2 + y3)))
+        val12 = ((x1 - x3) * (x2 - x3) - (y2 - y3) * (y1 - 2 * y2 + y3)) / (
+                    2 * (x3 * (-y1 + y2) + x2 * (y2 - y3) + x1 * (y1 - 2 * y2 + y3)))
+        val13 = (-((x1 - x2) * (x2 - x3)) + (y1 - y2) * (y1 - 2 * y2 + y3)) / (
+                    2 * (x3 * (-y1 + y2) + x2 * (y2 - y3) + x1 * (y1 - 2 * y2 + y3)))
+        val21 = ((x1 - x3) * (x2 - x3) - (y2 - y3) * (y1 - 2 * y2 + y3)) / (
+                    2 * (x3 * (-y1 + y2) + x2 * (y2 - y3) + x1 * (y1 - 2 * y2 + y3)))
+        val22 = -((x1 - x3) ** 2 + (y2 - y3) ** 2) / (2 * (x3 * (-y1 + y2) + x2 * (y2 - y3) + x1 * (y1 - 2 * y2 + y3)))
+        val23 = (x1 ** 2 + x2 * x3 - x1 * (x2 + x3) + (y1 - y2) * (y2 - y3)) / (
+                    2 * (x3 * (-y1 + y2) + x2 * (y2 - y3) + x1 * (y1 - 2 * y2 + y3)))
+        val31 = (-((x1 - x2) * (x2 - x3)) + (y1 - y2) * (y1 - 2 * y2 + y3)) / (
+                    2 * (x3 * (-y1 + y2) + x2 * (y2 - y3) + x1 * (y1 - 2 * y2 + y3)))
+        val32 = (x1 ** 2 + x2 * x3 - x1 * (x2 + x3) + (y1 - y2) * (y2 - y3)) / (
+                    2 * (x3 * (-y1 + y2) + x2 * (y2 - y3) + x1 * (y1 - 2 * y2 + y3)))
+        val33 = -((x1 - x2) ** 2 + (y1 - y2) ** 2) / (2 * (x3 * (-y1 + y2) + x2 * (y2 - y3) + x1 * (y1 - 2 * y2 + y3)))
+        kmat = np.array([[val11, val12, val13], [val21, val22, val23], [val31, val32, val33]])
+
+        return kmat
+
 
 class CalcFEM:
 

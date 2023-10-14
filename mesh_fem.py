@@ -269,8 +269,7 @@ class CreateMesh:
         if not self.meshcreated:
             print(f"Run create_mesh() first!")
         else:
-            plt.scatter(polygon_outline_vertices[:, 0], polygon_outline_vertices[:, 1], c='b', marker='o',
-                        label='Boundary Points')
+            plt.scatter(polygon_outline_vertices[:, 0], polygon_outline_vertices[:, 1], c='b', marker='o', label='Boundary Points')
             plt.scatter(self.all_points[:, 0], self.all_points[:, 1], c='b', marker='.', label='Seed Points')
             plt.triplot(self.all_points[:, 0], self.all_points[:, 1], self.triangles, c='gray', label='Mesh')
 
@@ -369,6 +368,143 @@ class ElementMatrice:
         return kmat
 
 
+    @staticmethod
+    def calc_2d_triangulat_heatflow_new(conductivity: float, nodes: list):
+        """
+                :param nodes: [[x1, y1],[x2, y2],[x3, y3]]
+        """
+
+        def n1(xi1, xi2):
+            return 1 - xi1 - xi2
+
+        def n2(xi1, xi2):
+            return xi1
+
+        def n3(xi1, xi2):
+            return xi2
+
+        def ngrad1(xi1, xi2):
+            return np.array([-1, -1], dtype=np.single)
+
+        def ngrad2(xi1, xi2):
+            return np.array([1, 0], dtype=np.single)
+
+        def ngrad3(xi1, xi2):
+            return np.array([0, 1], dtype=np.single)
+
+        def gradmat(xi1, xi2, x1, x2, x3, y1, y2, y3):
+            jacobi_inverse_transpose_matrix = np.array(
+                [[(y1 - y3) / (x2 * y1 - x3 * y1 - x1 * y2 + x3 * y2 + x1 * y3 - x2 * y3),
+                  (y1 - y2) / (x3 * (y1 - y2) + x1 * (y2 - y3) + x2 * (-y1 + y3))],
+                 [(x1 - x3) / (x3 * (y1 - y2) + x1 * (y2 - y3) + x2 * (-y1 + y3)),
+                  (x1 - x2) / (x2 * y1 - x3 * y1 - x1 * y2 + x3 * y2 + x1 * y3 - x2 * y3)]], dtype=np.single)
+
+            ngrad = np.array([ngrad1(xi1, xi2), ngrad2(xi1, xi2),
+                              ngrad3(xi1, xi2)], dtype=np.single)
+
+            return np.transpose(np.dot(jacobi_inverse_transpose_matrix, np.transpose(ngrad)))
+
+        x1 = nodes[0][0]
+        y1 = nodes[0][1]
+        x2 = nodes[1][0]
+        y2 = nodes[1][1]
+        x3 = nodes[2][0]
+        y3 = nodes[2][1]
+        k = conductivity
+
+        intnodes = np.array([[0, 0], [1, 0], [0, 1]])
+        intweights = np.array([1 / 6, 1 / 6, 1 / 6])
+
+        jacobi_det = -x2 * y1 + x3 * y1 + x1 * y2 - x3 * y2 - x1 * y3 + x2 * y3
+
+        elesteifmat = np.zeros((3, 3), dtype=np.single)
+        for i in range(3):
+            xi1 = intnodes[i, 0]
+            xi2 = intnodes[i, 1]
+            gr = gradmat(xi1, xi2, x1, x2, x3, y1, y2, y3)
+            grt = np.transpose(gr)
+            grxgrt = gr @ grt
+            fp = grxgrt * jacobi_det * intweights
+            elesteifmat = elesteifmat + fp
+
+        return elesteifmat
+
+
+    @staticmethod
+    def calc_2d_triangulat_acoustic(nodes: list):
+        """
+                :param nodes: [[x1, y1],[x2, y2],[x3, y3]]
+        """
+
+        def n1(xi1, xi2):
+            return 1 - xi1 - xi2
+
+        def n2(xi1, xi2):
+            return xi1
+
+        def n3(xi1, xi2):
+            return xi2
+
+        def ngrad1(xi1, xi2):
+            return np.array([-1, -1], dtype=np.single)
+
+        def ngrad2(xi1, xi2):
+            return np.array([1, 0], dtype=np.single)
+
+        def ngrad3(xi1, xi2):
+            return np.array([0, 1], dtype=np.single)
+
+        def gradmat(xi1, xi2, x1, x2, x3, y1, y2, y3):
+            jacobi_inverse_transpose_matrix = np.array(
+                [[(y1 - y3) / (x2 * y1 - x3 * y1 - x1 * y2 + x3 * y2 + x1 * y3 - x2 * y3),
+                  (y1 - y2) / (x3 * (y1 - y2) + x1 * (y2 - y3) + x2 * (-y1 + y3))],
+                 [(x1 - x3) / (x3 * (y1 - y2) + x1 * (y2 - y3) + x2 * (-y1 + y3)),
+                  (x1 - x2) / (x2 * y1 - x3 * y1 - x1 * y2 + x3 * y2 + x1 * y3 - x2 * y3)]], dtype=np.single)
+
+            ngrad = np.array([ngrad1(xi1, xi2), ngrad2(xi1, xi2),
+                              ngrad3(xi1, xi2)], dtype=np.single)
+
+            return np.transpose(np.dot(jacobi_inverse_transpose_matrix, np.transpose(ngrad)))
+
+        def phiqequdistarray(xi1, xi2):
+            f = np.array([[n1(xi1, xi2)], [n2(xi1, xi2)], [n3(xi1, xi2)]], dtype=np.single)
+            return f
+
+        x1 = nodes[0][0]
+        y1 = nodes[0][1]
+        x2 = nodes[1][0]
+        y2 = nodes[1][1]
+        x3 = nodes[2][0]
+        y3 = nodes[2][1]
+
+        intnodes = np.array([[0, 0], [1, 0], [0, 1]])
+        intweights = np.array([1 / 6, 1 / 6, 1 / 6])
+
+        jacobi_det = -x2 * y1 + x3 * y1 + x1 * y2 - x3 * y2 - x1 * y3 + x2 * y3
+
+        elesteifmat = np.zeros((3, 3), dtype=np.single)
+        for i in range(3):
+            xi1 = intnodes[i, 0]
+            xi2 = intnodes[i, 1]
+            gr = gradmat(xi1, xi2, x1, x2, x3, y1, y2, y3)
+            grt = np.transpose(gr)
+            grxgrt = gr @ grt
+            fp = grxgrt * jacobi_det * intweights
+            elesteifmat = elesteifmat + fp
+
+        elemassenmat = np.zeros((3, 3), dtype=np.single)
+        for i in range(3):
+            xi1 = intnodes[i, 0]
+            xi2 = intnodes[i, 1]
+            phi = phiqequdistarray(xi1, xi2)
+            phit = np.transpose(phiqequdistarray(xi1, xi2))
+            phixphit = phi @ phit
+            fp = phixphit * jacobi_det * intweights
+            elemassenmat = elemassenmat + fp
+
+        return elesteifmat, elemassenmat
+
+
 class CalcFEM:
 
     def __init__(self, all_points_numbered, all_outline_vertices_numbered, boundaries_numbered, triangles):
@@ -415,7 +551,8 @@ class CalcFEM:
     def calc_elementmatrices(self):
         self.nbr_of_elements = len(self.triangles)
 
-        self.all_element_matrices = np.zeros((self.nbr_of_elements, 3, 3), dtype=np.single)
+        self.all_element_matrices_steif = np.zeros((self.nbr_of_elements, 3, 3), dtype=np.single)
+        self.all_element_matrices_mass = np.zeros((self.nbr_of_elements, 3, 3), dtype=np.single)
 
         for idx, triangle in enumerate(self.triangles):
             p1, p2, p3 = triangle[0], triangle[1], triangle[2]
@@ -426,8 +563,9 @@ class CalcFEM:
             x3 = self.all_points[p3][0]
             y3 = self.all_points[p3][1]
             nodes = [[x1, y1], [x2, y2], [x3, y3]]
-            elemmatrix = ElementMatrice.calc_2d_triangulat_heatflow(self.k, nodes)
-            self.all_element_matrices[idx] = elemmatrix
+            elemsteif, elemmass = ElementMatrice.calc_2d_triangulat_acoustic(nodes)
+            self.all_element_matrices_steif[idx] = elemsteif
+            self.all_element_matrices_mass[idx] = elemmass
 
 
     def calc_force_vector(self):
@@ -436,14 +574,20 @@ class CalcFEM:
 
     def calc_system_matrices(self):
         self.syssteifarray = np.zeros((self.maxnode, self.maxnode), dtype=np.single)
+        self.sysmassarray = np.zeros((self.maxnode, self.maxnode), dtype=np.single)
+        self.sysarray = np.zeros((self.maxnode, self.maxnode), dtype=np.single)
 
         for ielem in range(self.nbr_of_elements):
-            elesteifmat = self.all_element_matrices[ielem]
+            elesteifmat = self.all_element_matrices_steif[ielem]
+            elemassmat = self.all_element_matrices_mass[ielem]
             for a in range(3):
                 for b in range(3):
                     zta = int(self.zuordtab[ielem, a])
                     ztb = int(self.zuordtab[ielem, b])
                     self.syssteifarray[zta, ztb] = self.syssteifarray[zta, ztb] + elesteifmat[a, b]
+                    self.sysmassarray[zta, ztb] = self.sysmassarray[zta, ztb] + elemassmat[a, b]
+
+        self.sysarray = self.syssteifarray - 300 * self.sysmassarray
 
 
     def implement_diriclet(self, sysmatrix, forcevector, diriclet_list):
@@ -498,7 +642,7 @@ class CalcFEM:
 
     def solve_linear_system(self):
         if self.syssteifarray is not None: # since it might be a np.array
-            self.solution = np.linalg.solve(self.syssteifarray, self.lastvektor)
+            self.solution = np.linalg.solve(self.sysarray, self.lastvektor)
 
 
 
@@ -552,7 +696,7 @@ class CalcFEM:
         triang_mpl = tri.Triangulation(self.all_points[:, 0], self.all_points[:, 1], self.triangles)
 
         fig, ax = plt.subplots(figsize=(8, 6))
-        ax.set_title('Temperature field')
+        ax.set_title('Pressure Field')
         ax.set_xlabel('x [m]')
         ax.set_ylabel('y [m]')
         ax.set_aspect(aspectxy)
@@ -562,9 +706,9 @@ class CalcFEM:
         divider = make_axes_locatable(ax)
         cax = divider.append_axes("right", size="5%", pad=0.2)
         cbar = fig.colorbar(contour, cax=cax)
-        cbar.ax.set_ylabel('Temp [T]')
+        cbar.ax.set_ylabel('P [pa]')
 
-        scatter = ax.scatter(self.all_points[:, 0], self.all_points[:, 1], c=values, cmap='viridis', marker='.', edgecolors='w', s=10)
+        #scatter = ax.scatter(self.all_points[:, 0], self.all_points[:, 1], c=values, cmap='viridis', marker='.', edgecolors='w', s=10)
         triplot = ax.triplot(triang_mpl, 'w-', linewidth=0.1)
 
         plt.show()
@@ -573,22 +717,28 @@ class CalcFEM:
 
         boundary0 = self.boundaries_numbered[0]
         boundary1 = self.boundaries_numbered[1]
+        boundary2 = self.boundaries_numbered[2]
         boundary3 = self.boundaries_numbered[3]
-        value_boundary0 = 50
-        value_boundary1 = 100
-        value_boundary3 = 80
+        boundary4 = self.boundaries_numbered[4]
+        value_boundary0 = 0
+        value_boundary1 = 1
+        value_boundary2 = 2
+        value_boundary3 = 3
+        value_boundary4 = 4
         boundary0_nodes = [(nbr[0], value_boundary0) for nbr in boundary0]
         boundary1_nodes = [(nbr[0], value_boundary1) for nbr in boundary1]
+        boundary2_nodes = [(nbr[0], value_boundary2) for nbr in boundary2]
         boundary3_nodes = [(nbr[0], value_boundary3) for nbr in boundary3]
+        boundary4_nodes = [(nbr[0], value_boundary4) for nbr in boundary4]
 
-        all_diriclet = boundary0_nodes + boundary1_nodes + boundary3_nodes
+        all_diriclet = boundary1_nodes
 
         self.calc_elementmatrices()
         self.calc_system_matrices()
         self.calc_force_vector()
 
-        sysmatrix_adj, force_vector_adj = self.implement_diriclet(self.syssteifarray, self.lastvektor, all_diriclet)
-        self.syssteifarray = sysmatrix_adj
+        sysmatrix_adj, force_vector_adj = self.implement_diriclet(self.sysarray, self.lastvektor, all_diriclet)
+        self.sysarray = sysmatrix_adj
         self.lastvektor = force_vector_adj
 
         self.print_matrix(self.syssteifarray)
@@ -600,9 +750,9 @@ class CalcFEM:
 
 
 def main():
-    density = 0.1
+    density = 0.02
     #polygon_vertices = np.array([[0, 0], [1, 0], [1, 1], [0.5, 1], [0.5, 0.5], [0, 0.5], [0, 0]])
-    polygon_vertices = np.array([[0, 0], [1, 0], [2, 1.2], [0.5, 0.75], [0, 1], [0, 0]])
+    polygon_vertices = np.array([[0, 0], [1, 0], [2, 1], [0.5, 0.5], [0, 1], [0, 0]])
     # start_time = time.time()
     # all_points, polygon_outline_vertices, triangles_filtered = create_mesh(polygon_vertices, density, method='randomuniform')
     # print(f"Nbr of vertices: {len(all_points)}")
@@ -615,7 +765,7 @@ def main():
     all_points_numbered, all_outline_vertices_numbered, boundaries_numbered, triangles = tst.create_mesh()
     calcfem = CalcFEM(all_points_numbered, all_outline_vertices_numbered, boundaries_numbered, triangles)
     calcfem.calc_fem()
-    tst.show_mesh()
+    #tst.show_mesh()
 
 
 

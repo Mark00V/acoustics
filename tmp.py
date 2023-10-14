@@ -1,45 +1,25 @@
-import tkinter as tk
-from tkinter import ttk
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import numpy as np
 
-# Create the main window
-root = tk.Tk()
-root.title("Matplotlib in Tkinter Example")
+def jacobi(nodes: np.array, xi1: float, xi2: float):
+    """
+    jacobi matrixfor triangular element
+    :param nodes: np.array [[x1, y1],[x2, y2],[x3,y3]]
+    :return:
+    """
+    x1 = nodes[0, 0]
+    y1 = nodes[0, 1]
+    x2 = nodes[1, 0]
+    y2 = nodes[1, 1]
+    x3 = nodes[2, 0]
+    y3 = nodes[2, 1]
 
-# Create a notebook (tabbed interface)
-notebook = ttk.Notebook(root)
-notebook.pack(fill='both', expand=True)
+    j11 = x2 * (1. - 1. * xi2) - 1. * x3 * xi2 + x1 * (-1. + 1. * xi2)
+    j12 = x3 * (1. - 1. * xi1) - 1. * x2 * xi1 + x1 * (-1. + 1. * xi1)
+    j21 = (-1. + 1. * xi2) * y1 + (1. - 1. * xi2) * y2 - 1. * xi2 * y3
+    j22 = (-1. + 1. * xi1) * y1 - 1. * xi1 * y2 + 1. * y3 - 1. * xi1 * y3
 
-# Create a tab for the Matplotlib plot
-tab1 = ttk.Frame(notebook)
-notebook.add(tab1, text="Plot")
+    return np.array([[j11, j12], [j21, j22]])
 
-# Create a Matplotlib figure and axis
-fig, ax = plt.subplots(figsize=(5, 4))
+nodes = np.array([[0,0],[1.1,0.1],[0.5,0.6]])
+print(jacobi(nodes, 0.12,1.3))
 
-# Plot some data
-x = [1, 2, 3, 4, 5]
-y = [10, 5, 8, 6, 2]
-ax.plot(x, y)
-
-# Create a FigureCanvasTkAgg widget to display the Matplotlib plot
-canvas = FigureCanvasTkAgg(fig, master=tab1)
-canvas.get_tk_widget().pack()
-
-# Add a button to update the plot (optional)
-update_button = tk.Button(tab1, text="Update Plot")
-update_button.pack()
-
-# You can define a function to update the plot when the button is clicked
-def update_plot():
-    # Update the plot with new data
-    new_y = [6, 8, 4, 3, 7]
-    ax.clear()
-    ax.plot(x, new_y)
-    canvas.draw()
-
-update_button.config(command=update_plot)
-
-# Start the Tkinter main loop
-root.mainloop()

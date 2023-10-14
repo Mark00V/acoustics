@@ -233,6 +233,9 @@ class CreateMesh:
         :param triangles:
         :return:
         """
+
+        quadri_list_n = np.array([list(elem) for elem in self.quadri_list])
+
         if not self.meshcreated:
             print(f"Run create_mesh() first!")
         else:
@@ -240,6 +243,12 @@ class CreateMesh:
                         label='Boundary Points')
             plt.scatter(self.all_points[:, 0], self.all_points[:, 1], c='b', marker='.', label='Seed Points')
             plt.triplot(self.all_points[:, 0], self.all_points[:, 1], self.triangles, c='gray', label='Mesh')
+
+            for quad in quadri_list_n:
+                x_values = [self.all_points[n][0] for n in quad]
+                y_values = [self.all_points[n][1] for n in quad]
+                plt.plot(x_values, y_values, marker='o', linestyle='-')  # 'o' for markers, '-' for lines
+                plt.fill(x_values, y_values, 'b', alpha=0.2)
 
             plt.xlabel('X')
             plt.ylabel('Y')
@@ -298,12 +307,29 @@ class CreateMesh:
         self.meshcreated = True
 
         # self.output_mesh_param() # prints output
+        quadri_list = self.make_quadri()
+        self.quadri_list = quadri_list
 
-        return all_points, polygon_outline_vertices, self.triangles
+        return all_points, polygon_outline_vertices, self.triangles, quadri_list
+
+    def make_quadri(self):
+
+        triangles_list = [set([p[0],p[1],p[2]]) for p in self.triangles]
+        remaining_triangles_list = triangles_list
+        quadri_list = list()
+        for tri in triangles_list[:]:
+            for n, tri_nxt in enumerate(remaining_triangles_list):
+                tri_set = tri.union(tri_nxt)
+                if len(tri_set) == 4:
+                    quadri_list.append(tri_set)
+                    del remaining_triangles_list[n]
+                    break
+
+        return quadri_list
 
 
 def main():
-    density = 0.2
+    density = 0.14 # even mit 0.14
     polygon_vertices = np.array([[0, 0], [1, 0], [1, 1], [0.5, 1], [0.5, 0.5], [0, 0.5], [0, 0]])
     #polygon_vertices = np.array([[0, 0], [1, 0], [2, 1.2], [0.5, 0.75], [0, 1], [0, 0]])
     # start_time = time.time()
@@ -315,7 +341,7 @@ def main():
     # show_mesh(all_points, polygon_outline_vertices, triangles_filtered)
     method = 'randomuniform'
     tst = CreateMesh(polygon_vertices, density, method)
-    all_points, polygon_outline_vertices, triangles = tst.create_mesh()
+    all_points, polygon_outline_vertices, triangles, quadri_list = tst.create_mesh()
     tst.show_mesh()
 
 
