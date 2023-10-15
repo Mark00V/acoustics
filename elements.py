@@ -1,5 +1,6 @@
 import numpy as np
-from typing import Tuple, List
+from typing import Tuple, Union
+
 
 class ElementMatrices:
     """
@@ -7,7 +8,6 @@ class ElementMatrices:
     """
     def __init__(self):
         ...
-
 
     @staticmethod
     def calc_2d_triangular_heatflow_p1(conductivity: float, nodes: list) -> Tuple[np.array, None]:
@@ -26,24 +26,26 @@ class ElementMatrices:
         y_3 = nodes[2][1]
         k = conductivity
 
-        val11 = -((k * (x_2 - x_3 - y_2 + y_3) ** 2) / (2 * (x_3 * (-y_1 + y_2) + x_2 * (y_1 - y_3) + x_1 * (-y_2 + y_3))))
+        val11 = -((k * (x_2 - x_3 - y_2 + y_3) ** 2) / (2 * (x_3 * (-y_1 + y_2)
+                                                             + x_2 * (y_1 - y_3) + x_1 * (-y_2 + y_3))))
         val12 = (k * (-x_2 + x_3 + y_2 - y_3) * (x_1 - x_3 - y_1 + y_3)) / (
                 2 * (x_3 * (y_1 - y_2) + x_1 * (y_2 - y_3) + x_2 * (-y_1 + y_3)))
         val13 = -((k * (x_1 - x_2 - y_1 + y_2) * (x_2 - x_3 - y_2 + y_3)) / (
                 2 * (x_3 * (-y_1 + y_2) + x_2 * (y_1 - y_3) + x_1 * (-y_2 + y_3))))
         val21 = val12
-        val22 = -((k * (x_1 - x_3 - y_1 + y_3) ** 2) / (2 * (x_3 * (-y_1 + y_2) + x_2 * (y_1 - y_3) + x_1 * (-y_2 + y_3))))
+        val22 = -((k * (x_1 - x_3 - y_1 + y_3) ** 2) / (2 * (x_3 * (-y_1 + y_2)
+                                                             + x_2 * (y_1 - y_3) + x_1 * (-y_2 + y_3))))
         val23 = (k * (x_1 - x_2 - y_1 + y_2) * (x_1 - x_3 - y_1 + y_3)) / (
                 2 * (x_3 * (-y_1 + y_2) + x_2 * (y_1 - y_3) + x_1 * (-y_2 + y_3)))
         val31 = val13
         val32 = val23
-        val33 = -((k * (x_1 - x_2 - y_1 + y_2) ** 2) / (2 * (x_3 * (-y_1 + y_2) + x_2 * (y_1 - y_3) + x_1 * (-y_2 + y_3))))
+        val33 = -((k * (x_1 - x_2 - y_1 + y_2) ** 2) / (2 * (x_3 * (-y_1 + y_2) +
+                                                             x_2 * (y_1 - y_3) + x_1 * (-y_2 + y_3))))
         stiffness_mat = np.array([[val11, val12, val13], [val21, val22, val23], [val31, val32, val33]], dtype=np.single)
 
-        mass_mat = None # TODO
+        mass_mat = None  # TODO
 
         return stiffness_mat, mass_mat
-
 
     @staticmethod
     def calc_2d_triangular_acoustic_p1(nodes: list) -> Tuple[np.array, np.array]:
@@ -56,50 +58,51 @@ class ElementMatrices:
             """
             Calculates form function for node 1 and order 1 for triangular elements
             """
-            return 1 - xi1 - xi2
 
+            return 1 - xi1 - xi2
 
         def n2(xi1: float, xi2: float) -> float:
             """
             Calculates form function for node 2 and order 1 for triangular elements
             """
-            return xi1
 
+            return xi1
 
         def n3(xi1: float, xi2: float) -> float:
             """
             Calculates form function for node 3 and order 1 for triangular elements
             """
-            return xi2
 
+            return xi2
 
         def ngrad1(xi1: float, xi2: float) -> np.array:
             """
             Calculates gradient of form function for node 1 and order 1 for triangular elements
             """
-            return np.array([-1, -1], dtype=np.single)
 
+            return np.array([-1, -1], dtype=np.single)
 
         def ngrad2(xi1: float, xi2: float) -> np.array:
             """
             Calculates gradient of form function for node 2 and order 1 for triangular elements
             """
-            return np.array([1, 0], dtype=np.single)
 
+            return np.array([1, 0], dtype=np.single)
 
         def ngrad3(xi1: float, xi2: float) -> np.array:
             """
             Calculates gradient of form function for node 3 and order 1 for triangular elements
             """
+
             return np.array([0, 1], dtype=np.single)
 
-
-        def gradmat(xi1: float, xi2: float,
+        def gradmat(xi1: Union[np.array, float], xi2: Union[np.array, float],
                     x1: float, x2: float, x3: float, y1: float, y2: float, y3: float) -> np.array:
             """
             Calculates grad matrix for calculation of element stiffness matrices
             :return: np.array -> [[_, _],[_, _],[_, _]]
             """
+
             jacobi_inverse_transpose_matrix = np.array(
                 [[(y1 - y3) / (x2 * y1 - x3 * y1 - x1 * y2 + x3 * y2 + x1 * y3 - x2 * y3),
                   (y1 - y2) / (x3 * (y1 - y2) + x1 * (y2 - y3) + x2 * (-y1 + y3))],
@@ -110,8 +113,7 @@ class ElementMatrices:
 
             return np.transpose(np.dot(jacobi_inverse_transpose_matrix, np.transpose(ngrad)))
 
-
-        def phiqequdistarray(xi1: float, xi2: float) -> np.array:
+        def phiqequdistarray(xi1: Union[np.array, float], xi2: Union[np.array, float]) -> np.array:
             """
             Calculates matrix for calculation of element mass matrices
             :return: np.array -> [[_],[_],[_]]
@@ -152,3 +154,15 @@ class ElementMatrices:
             mass_mat = mass_mat + fp
 
         return stiffness_mat, mass_mat
+
+
+if __name__ == "__main__":
+    # Example output
+    nodes = [[0, 0], [1.1, -0.1], [0.5, 0.6]]
+    k = 0.5
+    elements = ElementMatrices()
+    stiffness_heat_flow_p1, mass_heat_flow_p1 = elements.calc_2d_triangular_heatflow_p1(k, nodes)
+    stiffness_acoustic_flow_p1, mass_acoustic_flow_p1 = elements.calc_2d_triangular_acoustic_p1(nodes)
+
+    print(f"Heat flow element, p = 1: \n{stiffness_heat_flow_p1}\n{mass_heat_flow_p1}")
+    print(f"\nAcoustic element, p = 1: \n{stiffness_acoustic_flow_p1}\n{mass_acoustic_flow_p1}")

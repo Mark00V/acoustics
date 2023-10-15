@@ -1,5 +1,27 @@
+"""
+HOW TOO USE:
+    ...
+
+TODOS:
+- Assembling of system matrices is inefficient -> use sparse array
+- Selector for equation type (Heat/Acoustic)
+- Boundary conditions: Point for point source in acoustics
+- Inclined boundary conditions
+- First point = first click, not bottom left
+- Free space between x=0, y=0 and Canvas borders
+- ...
+
+KNOWN ERRORS:
+- The following parameters (amonst others) are causing divide by zero runtime warning:
+    density = 0.025
+    method = 'uniform'
+    polygon_vertices = np.array([[0, 0], [1, 0], [2, 1], [0.5, 0.5], [0, 1], [0, 0]])
+    calcfem.equation = 'HH'
+- ...
+"""
+
 # Python imports
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 import numpy as np
 import tkinter as tk
 import math
@@ -9,6 +31,19 @@ import time
 # Custom imports
 from calcfem import CalcFEM
 from mesh import CreateMesh
+
+#################################################
+# True for Development
+DEV = False
+#################################################
+
+#################################################
+# Other
+AUTHOR = 'Itsame Mario'
+VERSION_MAJOR = 1
+VERSION_MINOR = 0
+VERSION_PATCH = 0
+#################################################
 
 #################################################
 # tkinter static parameters
@@ -35,12 +70,13 @@ class FEMGUI:
         """
         constructor
         """
-        self.polygon_coordinates = [[0, 600]]
+
+        self.polygon_coordinates = [[0, 600]]  # first point bottom left
         self.firstclick_canvas = True
         self.polygon_closed = False
         self.mesh = None
         self.calcfem = None
-        self.click_counter = 0 # counts clicks in canvas
+        self.click_counter = 0  # counts clicks in canvas
         self.boundaries_set = None
 
         # FEM Data
@@ -51,6 +87,9 @@ class FEMGUI:
         self.boundary_values = dict()
 
     def finish_polygon_coordinates(self):
+        """
+        todo
+        """
 
         self.polygon_closed = True
         self.polygon_coordinates.append([0, 600])
@@ -72,15 +111,22 @@ class FEMGUI:
         self.canvas.create_oval(center_x - 15, center_y - 15, center_x + 15, center_y + 15, outline="black",
                                 fill="white")
         self.canvas.create_text(center_x, center_y, text=boundary_text, fill="blue", font=("Helvetica", 11))
-        #print(self.polygon_coordinates)
 
     def add_grid(self):
+        """
+        todo
+        """
+
         for x in range(0, CANVAS_WIDTH + GRIDSPACE, GRIDSPACE):
             self.canvas.create_line(x, 0, x, CANVAS_HEIGHT, fill="black", width=1)
         for y in range(0, CANVAS_HEIGHT + GRIDSPACE, GRIDSPACE):
             self.canvas.create_line(0, y, CANVAS_WIDTH, y, fill="black", width=1)
 
-    def find_grid(self, coord_x: int, coord_y: int):
+    def find_grid(self, coord_x: int, coord_y: int) -> Tuple[int, int]:
+        """
+        todo
+        """
+
         grid_x = range(0, CANVAS_WIDTH + GRIDSPACE, GRIDSPACE)
         grid_y = range(0, CANVAS_HEIGHT + GRIDSPACE, GRIDSPACE)
 
@@ -96,9 +142,14 @@ class FEMGUI:
             new_y = grid_y[div_y]
         else:
             new_y = grid_y[div_y + 1]
+
         return new_x, new_y
 
-    def coord_transform(self):
+    def coord_transform(self) -> List[List[float]]:
+        """
+
+        """
+
         scale_factor = 0.01  # todo
         polygon_coordinates_transformed = [[scale_factor * elem[0], -1 * scale_factor * (elem[1] - 600)]
                                            for elem in self.polygon_coordinates]
@@ -109,6 +160,10 @@ class FEMGUI:
         return polygon_coordinates_transformed
 
     def create_mesh(self):
+        """
+
+        """
+
         method = self.methods_dropdown_var.get()
         density_un = self.density_slider.get()
         density = 1 / density_un
@@ -141,26 +196,37 @@ class FEMGUI:
         top.title("Generated Mesh")
         canvas = FigureCanvasTkAgg(fig, master=top)
         canvas.get_tk_widget().pack()
-        text = ax.text(polygon_transformed_values_x_max * 0.75, polygon_transformed_values_y_min * 1.00, stats_string,
+        ax.text(polygon_transformed_values_x_max * 0.75, polygon_transformed_values_y_min * 1.00, stats_string,
                        fontsize=8, ha='left')
 
+    def clean_canvas(self, canvas: tk.Canvas):
+        """
+        Cleans the canvas
+        """
 
-    def clean_canvas(self, canvas):
         all_canvas_elements = canvas.find_all()
         for elem in all_canvas_elements:
             canvas.delete(elem)
 
-
     def create_output(self):
+        """
+        todo
+        """
+
         ...
 
-    def calc_fem_main(self):
+    def calc_fem_main(self) -> Optional[None]:
+        """
+        todo
+        """
+
         if not self.boundaries_set or not self.mesh: # TODO...autoclose of polygon oder so
             warning_window = tk.Toplevel(self.root)
             warning_window.title("Warning")
             warning_label = tk.Label(warning_window, text="Warning: Create Mesh / set boundary conditions first!", padx=20, pady=20, font=("Arial", 12), foreground='red')
             warning_label.pack()
-            return ''
+
+            return None
 
         self.calcfem = CalcFEM(self.all_points_numbered, self.all_outline_vertices_numbered,
                                self.boundaries_numbered, self.triangles, self.boundary_values)
@@ -168,6 +234,9 @@ class FEMGUI:
         self.show_fem_solution_window()
 
     def show_fem_solution_window(self):
+        """
+        todo
+        """
 
         fig, ax = self.calcfem.plot_solution()
         fem_stats_string = f"Boundary conditions:\n"
@@ -186,7 +255,11 @@ class FEMGUI:
         text = ax.text(polygon_transformed_values_x_max * 0.75, polygon_transformed_values_y_min * 1.00, fem_stats_string,
                        fontsize=10, ha='left')
 
-    def on_canvas_click(self, event):
+    def on_canvas_click(self, event: tk.Canvas.bind):   # todo: correct?
+        """
+        todo
+        """
+
         # Get coordinates of right click
         x, y = event.x, event.y
 
@@ -228,7 +301,7 @@ class FEMGUI:
                                     fill="white")
             self.canvas.create_text(center_x, center_y, text=boundary_text, fill="blue", font=("Helvetica", 11))
 
-        FEMGUI.on_canvas_click.prevpoint = (x, y)  # TODO: Why does this not work with self????
+        FEMGUI.on_canvas_click.prevpoint = (x, y)  # todo: ugly...
 
         # create point at click
         self.canvas.create_oval(x - DOTSIZE, y - DOTSIZE, x + DOTSIZE, y + DOTSIZE, outline="black", fill="#851d1f")
@@ -241,8 +314,10 @@ class FEMGUI:
         self.coord_var_x.set(f"{x}")
         self.coord_var_y.set(f"{y}")
 
-
-    def set_boundaries_window(self):
+    def set_boundaries_window(self) -> Optional[None]:
+        """
+        todo
+        """
 
         if not self.polygon_closed: # TODO...autoclose of polygon oder so
             warning_window = tk.Toplevel(self.root)
@@ -250,9 +325,14 @@ class FEMGUI:
             warning_label = tk.Label(warning_window, text="Warning: Close Polygon first!",
                                      padx=20, pady=20, font=("Arial", 12), foreground='red')
             warning_label.pack()
-            return ''
+
+            return None
 
         def set_value():
+            """
+            todo
+            """
+
             selected_boundary = self.boundary_select_var.get()
             selected_boundary = selected_boundary.split('B-')[-1]
             value = self.boundary_value_entry.get()
@@ -262,8 +342,6 @@ class FEMGUI:
             for boundary_nbr, value in self.boundary_values.items():
                 input_boundary_str += f"{boundary_nbr}: {value} ;"
             self.input_boundary_str.set(input_boundary_str)
-
-
 
         self.set_boundaries_window = tk.Toplevel(self.root)
         self.set_boundaries_window.geometry(f"{300}x{300}")
@@ -305,25 +383,21 @@ class FEMGUI:
         # todo: on close
         self.boundaries_set = True
 
-
-
-
     def exit(self):
         """
-        destroys mainwindow and closes programm
+        destroys main window and closes program
         :return:
         """
+
         self.root.destroy()
 
     def clear(self):
         """
         clears all values
-        :return:
         """
 
         self.clean_canvas(self.canvas)
         self.add_grid()
-
         self.polygon_coordinates = [[0, 600]]
         self.firstclick_canvas = True
         self.polygon_closed = False
@@ -339,8 +413,10 @@ class FEMGUI:
         self.polygon_coordinates_str.set(str(self.polygon_coordinates[0]))
         FEMGUI.on_canvas_click.prevpoint = (0, 600)
 
-
     def start(self):
+        """
+        Creates main window
+        """
         # Start tkinter
         root = tk.Tk()
         self.root = root
@@ -446,11 +522,13 @@ class FEMGUI:
 
 
 #################################################
-# Develop -> skips GUI
-dev = True
+# Develop -> skips GU
 
 def develop():
-    density = 0.025 # TODO: value density = 0.1 produces divide by zero runtime warning
+    """
+    For Developing -> sets init values and skips GUI
+    """
+    density = 0.025
     method = 'uniform'
     polygon_vertices = np.array([[0, 0], [1, 0], [2, 1], [0.5, 0.5], [0, 1], [0, 0]])
     boundary_values = {1: 1}
@@ -470,7 +548,10 @@ def develop():
 
 
 def main():
-    if not dev:
+    """
+    Starts GUI
+    """
+    if not DEV:  # For Development
         start = FEMGUI()
         start.start()
     else:
