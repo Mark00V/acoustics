@@ -586,8 +586,9 @@ class CalcFEM:
                     ztb = int(self.zuordtab[ielem, b])
                     self.syssteifarray[zta, ztb] = self.syssteifarray[zta, ztb] + elesteifmat[a, b]
                     self.sysmassarray[zta, ztb] = self.sysmassarray[zta, ztb] + elemassmat[a, b]
-
-        self.sysarray = self.syssteifarray - 300 * self.sysmassarray
+        freq = 1
+        omega = freq * math.pi * 2
+        self.sysarray = self.syssteifarray - omega**2 * self.sysmassarray
 
 
     def implement_diriclet(self, sysmatrix, forcevector, diriclet_list):
@@ -750,8 +751,8 @@ class CalcFEM:
 
 
 def main():
-    density = 0.02
-    #polygon_vertices = np.array([[0, 0], [1, 0], [1, 1], [0.5, 1], [0.5, 0.5], [0, 0.5], [0, 0]])
+    density = 0.025
+    polygon_vertices = np.array([[0, 0], [1, 0], [1, 1], [0.5, 1], [0.5, 0.5], [0, 0.5], [0, 0]])
     polygon_vertices = np.array([[0, 0], [1, 0], [2, 1], [0.5, 0.5], [0, 1], [0, 0]])
     # start_time = time.time()
     # all_points, polygon_outline_vertices, triangles_filtered = create_mesh(polygon_vertices, density, method='randomuniform')
@@ -760,7 +761,7 @@ def main():
     # runtime = end_time - start_time
     # print(f"Function runtime: {runtime} seconds")
     # show_mesh(all_points, polygon_outline_vertices, triangles_filtered)
-    method = 'randomuniform'
+    method = 'uniform'
     tst = CreateMesh(polygon_vertices, density, method)
     all_points_numbered, all_outline_vertices_numbered, boundaries_numbered, triangles = tst.create_mesh()
     calcfem = CalcFEM(all_points_numbered, all_outline_vertices_numbered, boundaries_numbered, triangles)

@@ -28,8 +28,6 @@ LINEWIDTH = 2
 GRIDSPACE = 25  # space between grid
 # Borderwidth (space between window frame and widgets and widgets between widgets, relative to windowsize)
 BORDER_WIDTH = 0.01
-
-
 #################################################
 
 
@@ -628,7 +626,7 @@ class CreateMesh:
         output_to_write += '\n\nTriangulation  matrix\n'
         for idt, triangle in enumerate(self.triangles):
             output_to_write += f"{idt}: {triangle}\n"
-        with open('output.txt', 'w') as f:
+        with open('../output.txt', 'w') as f:
             f.write(output_to_write)
 
     def create_mesh(self):
