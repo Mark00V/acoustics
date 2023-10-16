@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import math
 from typing import List, Tuple, Union
+from scipy.sparse import coo_matrix
 
 
 class CalcFEM:
@@ -29,16 +30,18 @@ class CalcFEM:
 
         self.all_points = np.array([elem[1] for elem in all_points_numbered])
         self.polygon_outline_vertices = np.array([elem[1] for elem in all_outline_vertices_numbered])
-        self.k = 0.5  # for testing
+        self.k = 0.5
         self.zuordtab = triangles
         self.maxnode = len(self.all_points)
+        self.maxelement = len(self.zuordtab)
         self.syssteifarray = None
         self.sysmassarray = None
         self.sysarray = None
         self.solution = None
         self.equation = 'WLG' # WLG for heat equation, 'HH' for Helmholtz equation
-        self.freq = 1  # for testing
-
+        self.freq = 1
+        self.c_air = 340
+        self.roh_air = 1.21
 
     def get_counter_clockwise_triangle(self, nodes: List[float]) -> List[float]:
         """
@@ -127,9 +130,44 @@ class CalcFEM:
 
         if self.equation == 'WLG':
             self.sysarray = self.syssteifarray
+        elif self.equation == 'HH':  # todo: include in elementmatrices
+            omega = self.freq * 2 * math.pi
+            self.sysarray = (1/self.roh_air) * self.syssteifarray \
+                            - omega**2 * (1/self.roh_air * 1/(self.c_air**2)) * self.sysmassarray
+
+    def calc_system_matrices_new(self):
+        """
+        todo: implement more efficient method for assembly
+        :return:
+        """
+
+        element_stiff_array = np.asarray(self.all_element_matrices_steif)
+        element_mass_array = np.asarray(self.all_element_matrices_mass)
+
+        vectora = [[[int(self.zuordtab[ielem, a]) for b in range(3)] for a in range(3)]
+                   for ielem in range(self.maxelement)]
+        vectora = np.asarray(vectora)
+        vectora = vectora.flatten()
+        row = vectora
+
+        vectorb = [[[int(self.zuordtab[ielem, b]) for b in range(3)] for a in range(3)]
+                   for ielem in range(self.maxelement)]
+        vectorb = np.asarray(vectorb)
+        vectorb = vectorb.flatten()
+        col = vectorb
+
+        data_stiff = element_stiff_array.flatten()
+        data_mass = element_mass_array.flatten()
+        syssteifarraycoo = coo_matrix((data_stiff, (row, col)), shape=(self.maxnode, self.maxnode))
+        sysmassarraycoo = coo_matrix((data_mass, (row, col)), shape=(self.maxnode, self.maxnode))
+
+        if self.equation == 'WLG':
+            self.sysarray = syssteifarraycoo
         elif self.equation == 'HH':
             omega = self.freq * 2 * math.pi
-            self.sysarray = self.syssteifarray - omega**2 * self.sysmassarray
+            self.sysarray = syssteifarraycoo - omega**2 * sysmassarraycoo
+
+
 
     def implement_diriclet(self, sysmatrix, forcevector, diriclet_list):
         """
@@ -273,6 +311,10 @@ class CalcFEM:
 
         self.calc_elementmatrices()
         self.calc_system_matrices()
+        ###
+        # Test für effizientere Assemblierung
+        # self.calc_system_matrices_new()
+        ###
         self.calc_force_vector()
 
         # Implementing boundary conditions

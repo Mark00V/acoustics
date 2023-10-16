@@ -1,6 +1,6 @@
 import numpy as np
 from typing import Tuple, Union
-
+import math
 
 class ElementMatrices:
     """
@@ -155,14 +155,79 @@ class ElementMatrices:
 
         return stiffness_mat, mass_mat
 
+    @staticmethod
+    def boundary_element_p1(nodes: list, value: float) -> np.array:
+        """
+        Creates boundary element (e.g. for impedance)
+        :param nodes: [[x_1, y_1],[x_2, y_2]]
+        :param value: value for the boundary element
+        :return:
+        """
+
+        def phi_p1(node: int, xi: float):
+            """
+            form function for 1D line element
+            todo: transformation for inclined boundary correct?
+            :param node: node for formfunction
+            :param xi:
+            :return:
+            """
+
+            node = int(node)
+            if node == 1:
+                f = 1.0 - xi
+            elif node == 2:
+                f = xi
+
+            return f
+
+        numintgld1 = np.array([[0.21132486, 0.78867513], [0.50000000, 0.50000000]],
+                              dtype=np.single)
+        intnodes = numintgld1[0]
+        intweights = numintgld1[1]
+
+        x_1 = nodes[0][0]
+        y_1 = nodes[0][1]
+        x_2 = nodes[1][0]
+        y_2 = nodes[1][1]
+
+        # get length and angle of element
+        delta_x = x_2 - x_1
+        delta_y = y_2 - y_1
+        angle = math.atan2(delta_y, delta_x)  # angle between horizontal axis and boundary
+        angle = (angle + 2 * math.pi) % (2 * math.pi)  # angle cant be greater than 360°
+        length = math.sqrt((x_2 - x_1) ** 2 + (y_2 - y_1) ** 2)  # length of boundary
+
+        # calculate element matrix
+        element_mat = np.zeros((2, 2), dtype=np.single)
+        nb = np.zeros((2, 2))
+        for j in range(0, 2):
+            for i in range(0, 2):
+                for ii in range(0, 2):
+                    val = phi_p1(i + 1, intnodes[j]) * phi_p1(ii + 1, intnodes[j]) * intweights[j]
+                    nb[i, ii] = val
+            element_mat = element_mat + nb
+        element_mat = element_mat * length * value
+
+        # transform element to angle
+        transformation_matrix = np.array([[math.cos(angle), -1 * math.sin(angle)],
+                                          [math.sin(angle), math.cos(angle)]])
+        transformed_element = transformation_matrix @ element_mat
+
+        return transformed_element
+
 
 if __name__ == "__main__":
     # Example output
-    nodes = [[0, 0], [1.1, -0.1], [0.5, 0.6]]
+    nodes_element = [[0, 0], [1.1, -0.1], [0.5, 0.6]]
+    nodes_boundary = [[0, 0], [2, 1]]
+    boundary_value = 2.5
     k = 0.5
     elements = ElementMatrices()
-    stiffness_heat_flow_p1, mass_heat_flow_p1 = elements.calc_2d_triangular_heatflow_p1(k, nodes)
-    stiffness_acoustic_flow_p1, mass_acoustic_flow_p1 = elements.calc_2d_triangular_acoustic_p1(nodes)
-
+    stiffness_heat_flow_p1, mass_heat_flow_p1 = elements.calc_2d_triangular_heatflow_p1(k, nodes_element)
+    stiffness_acoustic_flow_p1, mass_acoustic_flow_p1 = elements.calc_2d_triangular_acoustic_p1(nodes_element)
+    boundary_element = elements.boundary_element_p1(nodes_boundary, boundary_value)
     print(f"Heat flow element, p = 1: \n{stiffness_heat_flow_p1}\n{mass_heat_flow_p1}")
     print(f"\nAcoustic element, p = 1: \n{stiffness_acoustic_flow_p1}\n{mass_acoustic_flow_p1}")
+    print(f"\nBoundary element, p = 1: \n{boundary_element}")
+

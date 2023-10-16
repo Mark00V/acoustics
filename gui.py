@@ -92,6 +92,11 @@ class FEMGUI:
         self.boundaries_numbered = None
         self.triangles = None
         self.boundary_values = dict()
+        self.equation = 'WLG'  # WLG for heat equation, 'HH' for Helmholtz equation
+        self.value_k = 1
+        self.value_c = 1
+        self.value_roh = 1
+        self.value_freq = 1
 
     def finish_polygon_coordinates(self):
         """
@@ -247,6 +252,11 @@ class FEMGUI:
 
         self.calcfem = CalcFEM(self.all_points_numbered, self.all_outline_vertices_numbered,
                                self.boundaries_numbered, self.triangles, self.boundary_values)
+        self.calcfem.equation = self.equation
+        self.calcfem.freq = float(self.value_freq)
+        self.calcfem.c_air = float(self.value_c)
+        self.calcfem.roh_air = float(self.value_roh)
+        self.calcfem.k = float(self.value_k)
         self.solution = self.calcfem.calc_fem()
         self.show_fem_solution_window()
 
@@ -346,7 +356,7 @@ class FEMGUI:
 
         def set_value():
             """
-            Method for setting value on click on button set_value_button
+            Method for setting value for boundaries on click on button set_value_button
             and creates info string for set values
             """
 
@@ -360,42 +370,95 @@ class FEMGUI:
                 input_boundary_str += f"{boundary_nbr}: {value} ;"
             self.input_boundary_str.set(input_boundary_str)
 
+        def set_value_mats():
+            """
+            Method for setting material data
+            """
+            if self.equation == 'WLG':
+                self.value_k = self.materials_value_entry_k.get()
+                self.input_mats_str.set(f"k={self.value_k}")
+            elif self.equation == 'HH':
+                self.value_c = self.materials_value_entry_c.get()
+                self.value_roh = self.materials_value_entry_roh.get()
+                self.value_freq = self.materials_value_entry_freq.get()
+                self.input_mats_str.set(f"freq={self.value_freq}  c={self.value_c}  roh={self.value_roh}")
+
+
         self.set_boundaries_window = tk.Toplevel(self.root)
-        self.set_boundaries_window.geometry(f"{300}x{300}")
+        self.set_boundaries_window.geometry(f"{300}x{400}")
 
         # Select boundary
         boundary_select_label = tk.Label(self.set_boundaries_window, text="Select Boundary", font=("Arial", 12))
-        boundary_select_label.place(relx=0.1, rely=0.1)
+        boundary_select_label.place(relx=0.1, rely=0.05)
         boundaries = [f"B-{elem}" for elem in range(len(self.polygon_coordinates) - 1)]
         self.boundary_select_var = tk.StringVar()
         self.boundary_select_var.set(boundaries[0])  # default value
         self.dropdown_boundary_menu = tk.OptionMenu(self.set_boundaries_window, self.boundary_select_var, *boundaries)
-        self.dropdown_boundary_menu.place(relx=0.1, rely=0.2)
+        self.dropdown_boundary_menu.place(relx=0.1, rely=0.1)
 
         # select boundary type Placeholder
         boundary_type_label = tk.Label(self.set_boundaries_window, text="Select Type", font=("Arial", 12))
-        boundary_type_label.place(relx=0.6, rely=0.1)
-        types = ['Dirichlet', 'Neumann', 'Robin']
+        boundary_type_label.place(relx=0.6, rely=0.05)
+        types = ['Dirichlet', 'Neumann']
         self.boundary_type_var = tk.StringVar()
         self.boundary_type_var.set(types[0])  # default value
         self.dropdown_boundary_type_menu = tk.OptionMenu(self.set_boundaries_window, self.boundary_type_var, *types)
-        self.dropdown_boundary_type_menu.place(relx=0.6, rely=0.2)
+        self.dropdown_boundary_type_menu.place(relx=0.6, rely=0.1)
 
         # Input value
         boundary_value_label = tk.Label(self.set_boundaries_window, text="Value", font=("Arial", 12))
-        boundary_value_label.place(relx=0.1, rely=0.3)
+        boundary_value_label.place(relx=0.1, rely=0.2)
         self.boundary_value_entry = tk.Entry(self.set_boundaries_window)
-        self.boundary_value_entry.place(relx=0.1, rely=0.4)
+        self.boundary_value_entry.place(relx=0.1, rely=0.3)
 
         self.input_boundary_str = tk.StringVar()
         self.input_boundary_str.set('None')
         self.boundary_value_set_label = tk.Entry(self.set_boundaries_window, textvariable=self.input_boundary_str,
-                                                 state='readonly', font=("Arial", 10), width=30)
-        self.boundary_value_set_label.place(relx=0.1, rely=0.5)
+                                                 state='readonly', font=("Arial", 10), width=32)
+        self.boundary_value_set_label.place(relx=0.1, rely=0.4)
 
-        # Apply value
+        # Apply value for boundaries
         self.set_value_button = tk.Button(self.set_boundaries_window, text="Set Value", command=set_value, font=("Arial", 12))
-        self.set_value_button.place(relx=0.6, rely=0.38)
+        self.set_value_button.place(relx=0.6, rely=0.28)
+
+        # Get equation type and add material properties
+        equ_type_dict = {'Heat equation': 'WLG',
+                         'Helmholtz equation': 'HH'}
+        equation_type_selected = self.equations_dropdown_var.get()
+        self.equation = equ_type_dict[equation_type_selected]
+
+        materials_label = tk.Label(self.set_boundaries_window, text="Materials", font=("Arial", 12))
+        materials_label .place(relx=0.1, rely=0.5)
+        if self.equation == 'WLG':
+            materials_label_k = tk.Label(self.set_boundaries_window, text="k:", font=("Arial", 12))
+            materials_label_k.place(relx=0.1, rely=0.6)
+            self.materials_value_entry_k = tk.Entry(self.set_boundaries_window, width=10)
+            self.materials_value_entry_k.place(relx=0.25, rely=0.6)
+        elif self.equation == 'HH':
+            materials_label_c = tk.Label(self.set_boundaries_window, text="c:", font=("Arial", 12))
+            materials_label_c.place(relx=0.1, rely=0.6)
+            materials_label_roh = tk.Label(self.set_boundaries_window, text="roh:", font=("Arial", 12))
+            materials_label_roh.place(relx=0.1, rely=0.7)
+            materials_label_freq = tk.Label(self.set_boundaries_window, text="Freq:", font=("Arial", 12))
+            materials_label_freq.place(relx=0.1, rely=0.8)
+            self.materials_value_entry_c = tk.Entry(self.set_boundaries_window, width=10)
+            self.materials_value_entry_c.place(relx=0.25, rely=0.6)
+            self.materials_value_entry_roh = tk.Entry(self.set_boundaries_window, width=10)
+            self.materials_value_entry_roh.place(relx=0.25, rely=0.7)
+            self.materials_value_entry_freq = tk.Entry(self.set_boundaries_window, width=10)
+            self.materials_value_entry_freq.place(relx=0.25, rely=0.8)
+
+        # Apply values for materials
+        self.set_value_button_mats = tk.Button(self.set_boundaries_window, text="Set Value",
+                                               command=set_value_mats, font=("Arial", 12))
+        self.set_value_button_mats.place(relx=0.6, rely=0.6)
+
+        # Show material values
+        self.input_mats_str = tk.StringVar()
+        self.input_mats_str.set('None')
+        self.mats_value_set_label = tk.Entry(self.set_boundaries_window, textvariable=self.input_mats_str,
+                                                 state='readonly', font=("Arial", 10), width=32)
+        self.mats_value_set_label.place(relx=0.1, rely=0.875)
 
         self.boundaries_set = True
 
@@ -517,8 +580,17 @@ class FEMGUI:
         calc_fem_button = tk.Button(root, text="Calculate FEM ", command=self.calc_fem_main, font=("Arial", 13))
         calc_fem_button.place(relx=0.55, rely=0.85)
 
+        # Select equation type
+        equation_label = tk.Label(root, text="Equation:", font=("Arial", 12))
+        equation_label.place(relx=0.7, rely=0.85)
+        equations = ['Heat equation', 'Helmholtz equation']
+        self.equations_dropdown_var = tk.StringVar()
+        self.equations_dropdown_var.set(equations[0])  # default value
+        dropdown_menu_equations = tk.OptionMenu(root, self.equations_dropdown_var, *equations)
+        dropdown_menu_equations.place(relx=0.7, rely=0.9)
+
         # Set Boundaries button
-        set_boundaries_button = tk.Button(root, text="Set Boundaries", command=self.set_boundaries_window, font=("Arial", 13))
+        set_boundaries_button = tk.Button(root, text="Boundaries/Materials", command=self.set_boundaries_window, font=("Arial", 13))
         set_boundaries_button.place(relx=0.55, rely=0.9)
 
         # add grid
@@ -543,22 +615,30 @@ def develop():
     """
     For Developing -> sets init values and skips GUI
     """
-    density = 0.025
+    density = 0.08
     method = 'uniform'
     polygon_vertices = np.array([[0, 0], [1, 0], [2, 1], [0.5, 0.5], [0, 1], [0, 0]])
     boundary_values = {1: 1}
-    start_time = time.time()
+    start_time_mesh = time.time()
     mesh = CreateMesh(polygon_vertices, density, method)
-    all_points_numbered, all_outline_vertices_numbered, boundaries_numbered, triangles = mesh.create_mesh()
+    all_points_numbered, all_outline_vertices_numbered, \
+        boundaries_numbered, triangles = mesh.create_mesh()
+    end_time_mesh = time.time()
     mesh.show_mesh()
-    calcfem = CalcFEM(all_points_numbered, all_outline_vertices_numbered, boundaries_numbered, triangles, boundary_values)
+    start_time_fem = time.time()
+    calcfem = CalcFEM(all_points_numbered, all_outline_vertices_numbered,
+                      boundaries_numbered, triangles, boundary_values)
     calcfem.equation = 'HH'  # WLG for heat equation, 'HH' for Helmholtz equation
-    calcfem.freq = 5
+    calcfem.freq = 500
     calcfem.calc_fem()
-    end_time = time.time()
-    runtime = end_time - start_time
+    end_time_fem = time.time()
+    runtime_mesh = end_time_mesh - start_time_mesh
+    runtim_fem = end_time_fem - start_time_fem
     calcfem.plot_solution_dev()
-    print(f"Runtime: {runtime:.4f}")
+    print(f"Runtime mesh generation: {runtime_mesh:.4f}")
+    print(f"Runtime fem calculation: {runtim_fem:.4f}")
+    print(f"Number of elements: {len(triangles)}")
+    print(f"Number of nodes: {len(all_points_numbered)}")
 
 #################################################
 
