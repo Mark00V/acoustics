@@ -5,11 +5,22 @@ import matplotlib.tri as tri
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import math
-from typing import List, Tuple
+from typing import List, Tuple, Union
+
 
 class CalcFEM:
 
-    def __init__(self, all_points_numbered, all_outline_vertices_numbered, boundaries_numbered, triangles, boundary_values):
+    def __init__(self, all_points_numbered, all_outline_vertices_numbered,
+                 boundaries_numbered, triangles, boundary_values):
+        """
+        Constructor
+        :param all_points_numbered:
+        :param all_outline_vertices_numbered:
+        :param boundaries_numbered:
+        :param triangles:
+        :param boundary_values:
+        """
+
         self.all_points_numbered = all_points_numbered
         self.all_outline_vertices_numbered = all_outline_vertices_numbered
         self.boundaries_numbered = boundaries_numbered
@@ -18,7 +29,7 @@ class CalcFEM:
 
         self.all_points = np.array([elem[1] for elem in all_points_numbered])
         self.polygon_outline_vertices = np.array([elem[1] for elem in all_outline_vertices_numbered])
-        self.k = 0.5  # todo, test
+        self.k = 0.5  # for testing
         self.zuordtab = triangles
         self.maxnode = len(self.all_points)
         self.syssteifarray = None
@@ -26,16 +37,17 @@ class CalcFEM:
         self.sysarray = None
         self.solution = None
         self.equation = 'WLG' # WLG for heat equation, 'HH' for Helmholtz equation
-        self.freq = 1 # todo
+        self.freq = 1  # for testing
 
 
     def get_counter_clockwise_triangle(self, nodes: List[float]) -> List[float]:
         """
         rearanges the nodes, so that they are counter clockwise
-        TODO: IST DAS NOTWENIG????
+        probably not necessary...
         :param nodes:
         :return:
         """
+
         x1 = nodes[0][0]
         y1 = nodes[0][1]
         x2 = nodes[1][0]
@@ -54,9 +66,15 @@ class CalcFEM:
         elif x2 > x1:
             new_nodes.append(nodes[1])
             new_nodes.append(nodes[2])
+
         return new_nodes
 
     def calc_elementmatrices(self):
+        """
+
+        :return:
+        """
+
         self.nbr_of_elements = len(self.triangles)
 
         self.all_element_matrices_steif = np.zeros((self.nbr_of_elements, 3, 3), dtype=np.single)
@@ -80,9 +98,19 @@ class CalcFEM:
                 self.all_element_matrices_mass[idx] = elemmass
 
     def calc_force_vector(self):
+        """
+
+        :return:
+        """
+
         self.lastvektor = np.zeros(self.maxnode, dtype=np.single)
 
     def calc_system_matrices(self):
+        """
+
+        :return:
+        """
+
         self.syssteifarray = np.zeros((self.maxnode, self.maxnode), dtype=np.single)
         self.sysmassarray = np.zeros((self.maxnode, self.maxnode), dtype=np.single)
         self.sysarray = np.zeros((self.maxnode, self.maxnode), dtype=np.single)
@@ -104,6 +132,13 @@ class CalcFEM:
             self.sysarray = self.syssteifarray - omega**2 * self.sysmassarray
 
     def implement_diriclet(self, sysmatrix, forcevector, diriclet_list):
+        """
+
+        :param sysmatrix:
+        :param forcevector:
+        :param diriclet_list:
+        :return:
+        """
 
         diriclet_list_positions = [pos[0] for pos in diriclet_list]
         diriclet_list_values = [pos[1] for pos in diriclet_list]
@@ -122,7 +157,11 @@ class CalcFEM:
 
         return sysmatrix, forcevector
 
-    def print_matrix(self, matrix):
+    def print_matrix(self, matrix: Union[np.array, list]):
+        """
+        Prints matrix
+        :param matrix: [[val1, val2, val3],[val4,...],[...]], either np.array or list
+        """
 
         if not isinstance(matrix[0], np.ndarray):
             if len(matrix) < 50:
@@ -153,60 +192,27 @@ class CalcFEM:
                 print("]")
 
     def solve_linear_system(self):
+        """
+        Solves the linear system
+        """
+
         if self.sysarray is not None:  # since it might be a np.array
             self.solution = np.linalg.solve(self.sysarray, self.lastvektor)
 
     def plot_solution_dev(self):
+        """
+        Plots the solution via matplotlib
+        """
 
-        solutionallnodes = np.zeros((self.maxnode, 3))
-        for i in range(self.maxnode):
-            solutionallnodes[i, 0] = self.all_points[i, 0]
-            solutionallnodes[i, 1] = self.all_points[i, 1]
-        datax = solutionallnodes[:, 0]
-        datay = solutionallnodes[:, 1]
+        plot_label_dict = {'WLG': {'title': 'Temperature Field', 'ylabel': 'Temp [K]'},
+                           'HH': {'title': 'Pressure Field', 'ylabel': 'P [pa]'}}
         dataz = np.real(self.solution)
-
-        minx = min(datax)
-        maxx = max(datax)
-        miny = min(datay)
-        maxy = max(datay)
-
-        points = solutionallnodes[:, (0, 1)]
         values = dataz
-        grid_x, grid_y = np.mgrid[minx:maxx:600j, miny:maxy:600j]
-        grid_z1 = griddata(points, values, (grid_x, grid_y), method='linear')
-
-        # Contourplot
-        nr_of_contours = 100  # Contouren insgesamt, hoher Wert für Quasi-Densityplot
-        nr_of_contourlines = 5  # EIngezeichnete Contourlinien, Wert nicht exakt...
         aspectxy = 1
-        ctlines = int(nr_of_contours / nr_of_contourlines)
-
-        dataX = grid_x
-        dataY = grid_y
-        dataZ = grid_z1
-
-        # fig1, ax = plt.subplots()
-        # CS1 = ax.contourf(dataX, dataY, dataZ, nr_of_contours, cmap=plt.cm.gnuplot2)
-        # ax.set_title('Temperature field')
-        # ax.set_xlabel('x [m]')
-        # ax.set_ylabel('y [m]')
-        # ax.set_aspect(aspectxy)
-        #
-        # divider = make_axes_locatable(ax)
-        # cax = divider.append_axes("right", size="5%", pad=0.2)
-        # cbar = fig1.colorbar(CS1, cax=cax)
-        # cbar.ax.set_ylabel('Temp [T]')
-        #
-        # plt.scatter(self.polygon_outline_vertices[:, 0], self.polygon_outline_vertices[:, 1], c='b', marker='o',
-        #             label='Boundary Points')
-        # plt.scatter(self.all_points[:, 0], self.all_points[:, 1], c='b', marker='.', label='Seed Points')
-        # plt.triplot(self.all_points[:, 0], self.all_points[:, 1], self.triangles, c='gray', label='Mesh')
-
         triang_mpl = tri.Triangulation(self.all_points[:, 0], self.all_points[:, 1], self.triangles)
 
         fig, ax = plt.subplots(figsize=(12, 8))
-        ax.set_title('Temperature field')
+        ax.set_title(plot_label_dict[self.equation]['title'])
         ax.set_xlabel('x [m]')
         ax.set_ylabel('y [m]')
         ax.set_aspect(aspectxy)
@@ -215,65 +221,27 @@ class CalcFEM:
         divider = make_axes_locatable(ax)
         cax = divider.append_axes("right", size="5%", pad=0.2)
         cbar = fig.colorbar(contour, cax=cax)
-        cbar.ax.set_ylabel('Temp [T]')
-
-        #scatter = ax.scatter(self.all_points[:, 0], self.all_points[:, 1], c=values, cmap='viridis', marker='.', edgecolors='w', s=10)
-        triplot = ax.triplot(triang_mpl, 'w-', linewidth=0.1)
+        cbar.ax.set_ylabel(plot_label_dict[self.equation]['ylabel'])
+        ax.triplot(triang_mpl, 'w-', linewidth=0.1)
 
         plt.show()
 
 
     def plot_solution(self):
+        """
+        Plots the solution via matplotlib
+        """
 
-        solutionallnodes = np.zeros((self.maxnode, 3))
-        for i in range(self.maxnode):
-            solutionallnodes[i, 0] = self.all_points[i, 0]
-            solutionallnodes[i, 1] = self.all_points[i, 1]
-        datax = solutionallnodes[:, 0]
-        datay = solutionallnodes[:, 1]
+        plot_label_dict = {'WLG': {'title': 'Temperature Field', 'ylabel': 'Temp [K]'},
+                           'HH': {'title': 'Pressure Field', 'ylabel': 'P [pa]'}}
         dataz = np.real(self.solution)
-
-        minx = min(datax)
-        maxx = max(datax)
-        miny = min(datay)
-        maxy = max(datay)
-
-        points = solutionallnodes[:, (0, 1)]
         values = dataz
-        grid_x, grid_y = np.mgrid[minx:maxx:600j, miny:maxy:600j]
-        grid_z1 = griddata(points, values, (grid_x, grid_y), method='linear')
-
-        # Contourplot
-        nr_of_contours = 100  # Contouren insgesamt, hoher Wert für Quasi-Densityplot
-        nr_of_contourlines = 5  # EIngezeichnete Contourlinien, Wert nicht exakt...
         aspectxy = 1
-        ctlines = int(nr_of_contours / nr_of_contourlines)
-
-        dataX = grid_x
-        dataY = grid_y
-        dataZ = grid_z1
-
-        # fig1, ax = plt.subplots()
-        # CS1 = ax.contourf(dataX, dataY, dataZ, nr_of_contours, cmap=plt.cm.gnuplot2)
-        # ax.set_title('Temperature field')
-        # ax.set_xlabel('x [m]')
-        # ax.set_ylabel('y [m]')
-        # ax.set_aspect(aspectxy)
-        #
-        # divider = make_axes_locatable(ax)
-        # cax = divider.append_axes("right", size="5%", pad=0.2)
-        # cbar = fig1.colorbar(CS1, cax=cax)
-        # cbar.ax.set_ylabel('Temp [T]')
-        #
-        # plt.scatter(self.polygon_outline_vertices[:, 0], self.polygon_outline_vertices[:, 1], c='b', marker='o',
-        #             label='Boundary Points')
-        # plt.scatter(self.all_points[:, 0], self.all_points[:, 1], c='b', marker='.', label='Seed Points')
-        # plt.triplot(self.all_points[:, 0], self.all_points[:, 1], self.triangles, c='gray', label='Mesh')
-
         triang_mpl = tri.Triangulation(self.all_points[:, 0], self.all_points[:, 1], self.triangles)
 
         fig, ax = plt.subplots(figsize=(12, 8))
-        ax.set_title('Temperature field')
+
+        ax.set_title(plot_label_dict[self.equation]['title'])
         ax.set_xlabel('x [m]')
         ax.set_ylabel('y [m]')
         ax.set_aspect(aspectxy)
@@ -282,15 +250,20 @@ class CalcFEM:
         divider = make_axes_locatable(ax)
         cax = divider.append_axes("right", size="5%", pad=0.2)
         cbar = fig.colorbar(contour, cax=cax)
-        cbar.ax.set_ylabel('Temp [T]')
+        cbar.ax.set_ylabel(plot_label_dict[self.equation]['ylabel'])
 
-        scatter = ax.scatter(self.all_points[:, 0], self.all_points[:, 1], c=values, cmap='viridis', marker='.',
+        ax.scatter(self.all_points[:, 0], self.all_points[:, 1], c=values, cmap='viridis', marker='.',
                              edgecolors='w', s=10)
-        triplot = ax.triplot(triang_mpl, 'w-', linewidth=0.1)
+        ax.triplot(triang_mpl, 'w-', linewidth=0.1)
 
         return fig, ax
 
     def calc_fem(self):
+        """
+        main method for calculation, calculates elementmatrices, assembly of system matrices,
+        implements boundary conditions, solves linear system
+        :return:
+        """
 
         all_diriclet = []
         for boundary_number, boundary_value in self.boundary_values.items():
@@ -302,14 +275,14 @@ class CalcFEM:
         self.calc_system_matrices()
         self.calc_force_vector()
 
+        # Implementing boundary conditions
         sysmatrix_adj, force_vector_adj = self.implement_diriclet(self.sysarray, self.lastvektor, all_diriclet)
         self.sysarray = sysmatrix_adj
         self.lastvektor = force_vector_adj
-
-        #self.print_matrix(self.syssteifarray)
-        #self.print_matrix(self.lastvektor)
-
         self.solve_linear_system()
-        #self.plot_solution()
 
         return self.solution
+
+
+if __name__ == "__main__":
+    ...  # todo: example input and output

@@ -9,6 +9,13 @@ TODOS:
 - Inclined boundary conditions
 - First point = first click, not bottom left
 - Free space between x=0, y=0 and Canvas borders
+- scale_factor in gui
+- Create output file
+- Automatic close of polygon for click on create mesh
+- Add points for mesh creation
+- Select boundary type: Dirichlet, Neumann, Robin
+- Set Material values
+- For check_vertice_outline(): if in proximity (tolerance) of corner point of polygon -> exclude
 - ...
 
 KNOWN ERRORS:
@@ -34,7 +41,7 @@ from mesh import CreateMesh
 
 #################################################
 # True for Development
-DEV = False
+DEV = True
 #################################################
 
 #################################################
@@ -88,7 +95,7 @@ class FEMGUI:
 
     def finish_polygon_coordinates(self):
         """
-        todo
+        Connects first and last point of polygon for click on button "CLose Polygon"
         """
 
         self.polygon_closed = True
@@ -114,7 +121,7 @@ class FEMGUI:
 
     def add_grid(self):
         """
-        todo
+        Creates grid in canvas,spaced by global var GRIDSPACE
         """
 
         for x in range(0, CANVAS_WIDTH + GRIDSPACE, GRIDSPACE):
@@ -124,7 +131,10 @@ class FEMGUI:
 
     def find_grid(self, coord_x: int, coord_y: int) -> Tuple[int, int]:
         """
-        todo
+        Locks mouse click on canvas for polygon creation to the closest grid point
+        :param coord_x: int
+        :param coord_y: int
+        :return: Tuple[int, int]
         """
 
         grid_x = range(0, CANVAS_WIDTH + GRIDSPACE, GRIDSPACE)
@@ -147,10 +157,11 @@ class FEMGUI:
 
     def coord_transform(self) -> List[List[float]]:
         """
-
+        Transformation of polygon coordinates in canvas (pixel, max values in CANVAS_WIDTH, CANVAS_HEIGHT) to meter
+        by multiplication with scale_factor
         """
 
-        scale_factor = 0.01  # todo
+        scale_factor = 0.01
         polygon_coordinates_transformed = [[scale_factor * elem[0], -1 * scale_factor * (elem[1] - 600)]
                                            for elem in self.polygon_coordinates]
         polygon_coordinates_transformed = [[elem[0], 0 if elem[1] == -0 else elem[1]]
@@ -161,7 +172,9 @@ class FEMGUI:
 
     def create_mesh(self):
         """
-
+        Creates mesh by clicking on Create Mesh Button
+        Sets the instance variables and performs calculations
+        Creates new window for showing mesh
         """
 
         method = self.methods_dropdown_var.get()
@@ -175,7 +188,8 @@ class FEMGUI:
         end_time = time.time()
         elased_time = end_time - start_time
 
-        self.all_points_numbered, self.all_outline_vertices_numbered, self.boundaries_numbered, self.triangles = self.mesh.create_mesh()
+        self.all_points_numbered, self.all_outline_vertices_numbered, \
+            self.boundaries_numbered, self.triangles = self.mesh.create_mesh()
         fig, ax = self.mesh.show_mesh()
 
         # create new window
@@ -201,7 +215,9 @@ class FEMGUI:
 
     def clean_canvas(self, canvas: tk.Canvas):
         """
-        Cleans the canvas
+        cleans specified tk.Canvas element
+        :param canvas: tk.Canvas
+        :return:
         """
 
         all_canvas_elements = canvas.find_all()
@@ -210,17 +226,18 @@ class FEMGUI:
 
     def create_output(self):
         """
-        todo
+        Create output file
         """
 
         ...
 
     def calc_fem_main(self) -> Optional[None]:
         """
-        todo
+        Calls FEM calculations and method to create new window for showing results
+        :return: Optional[None], only performs calculations if mesh is created and boundary conditions specified
         """
 
-        if not self.boundaries_set or not self.mesh: # TODO...autoclose of polygon oder so
+        if not self.boundaries_set or not self.mesh:
             warning_window = tk.Toplevel(self.root)
             warning_window.title("Warning")
             warning_label = tk.Label(warning_window, text="Warning: Create Mesh / set boundary conditions first!", padx=20, pady=20, font=("Arial", 12), foreground='red')
@@ -235,7 +252,7 @@ class FEMGUI:
 
     def show_fem_solution_window(self):
         """
-        todo
+        Gets plot data from plot_solution() and creates new window for showing FEM solution
         """
 
         fig, ax = self.calcfem.plot_solution()
@@ -252,12 +269,14 @@ class FEMGUI:
         fem_solution_window.geometry(f"{1200}x{800}")
         canvas = FigureCanvasTkAgg(fig, master=fem_solution_window)
         canvas.get_tk_widget().pack()
-        text = ax.text(polygon_transformed_values_x_max * 0.75, polygon_transformed_values_y_min * 1.00, fem_stats_string,
+        ax.text(polygon_transformed_values_x_max * 0.75, polygon_transformed_values_y_min * 1.00, fem_stats_string,
                        fontsize=10, ha='left')
 
-    def on_canvas_click(self, event: tk.Canvas.bind):   # todo: correct?
+    def on_canvas_click(self, event: tk.Canvas.bind):
         """
-        todo
+        On mouseclick in canvas in mainwindow, creates graphics for nodes for polygon definition,
+        boundary numbering and lines between nodes
+        :param event: tk.Canvas.bind, Mouseclick event in canvas
         """
 
         # Get coordinates of right click
@@ -301,14 +320,10 @@ class FEMGUI:
                                     fill="white")
             self.canvas.create_text(center_x, center_y, text=boundary_text, fill="blue", font=("Helvetica", 11))
 
-        FEMGUI.on_canvas_click.prevpoint = (x, y)  # todo: ugly...
+        FEMGUI.on_canvas_click.prevpoint = (x, y)
 
         # create point at click
         self.canvas.create_oval(x - DOTSIZE, y - DOTSIZE, x + DOTSIZE, y + DOTSIZE, outline="black", fill="#851d1f")
-
-        # Clear content
-        self.coord_var_x.set('0')
-        self.coord_var_y.set('600')
 
         # Display coordinates
         self.coord_var_x.set(f"{x}")
@@ -316,10 +331,11 @@ class FEMGUI:
 
     def set_boundaries_window(self) -> Optional[None]:
         """
-        todo
+        Creates window for boundary condition definition
+        :return: None if polygon not closed -> creates warning window instead
         """
 
-        if not self.polygon_closed: # TODO...autoclose of polygon oder so
+        if not self.polygon_closed:
             warning_window = tk.Toplevel(self.root)
             warning_window.title("Warning")
             warning_label = tk.Label(warning_window, text="Warning: Close Polygon first!",
@@ -330,7 +346,8 @@ class FEMGUI:
 
         def set_value():
             """
-            todo
+            Method for setting value on click on button set_value_button
+            and creates info string for set values
             """
 
             selected_boundary = self.boundary_select_var.get()
@@ -355,7 +372,7 @@ class FEMGUI:
         self.dropdown_boundary_menu = tk.OptionMenu(self.set_boundaries_window, self.boundary_select_var, *boundaries)
         self.dropdown_boundary_menu.place(relx=0.1, rely=0.2)
 
-        # select boundary type Placeholder - TODO: Not yet implemented
+        # select boundary type Placeholder
         boundary_type_label = tk.Label(self.set_boundaries_window, text="Select Type", font=("Arial", 12))
         boundary_type_label.place(relx=0.6, rely=0.1)
         types = ['Dirichlet', 'Neumann', 'Robin']
@@ -380,13 +397,11 @@ class FEMGUI:
         self.set_value_button = tk.Button(self.set_boundaries_window, text="Set Value", command=set_value, font=("Arial", 12))
         self.set_value_button.place(relx=0.6, rely=0.38)
 
-        # todo: on close
         self.boundaries_set = True
 
     def exit(self):
         """
         destroys main window and closes program
-        :return:
         """
 
         self.root.destroy()
@@ -537,7 +552,8 @@ def develop():
     all_points_numbered, all_outline_vertices_numbered, boundaries_numbered, triangles = mesh.create_mesh()
     mesh.show_mesh()
     calcfem = CalcFEM(all_points_numbered, all_outline_vertices_numbered, boundaries_numbered, triangles, boundary_values)
-    calcfem.equation = 'HH' # WLG for heat equation, 'HH' for Helmholtz equation
+    calcfem.equation = 'HH'  # WLG for heat equation, 'HH' for Helmholtz equation
+    calcfem.freq = 5
     calcfem.calc_fem()
     end_time = time.time()
     runtime = end_time - start_time
@@ -558,6 +574,4 @@ def main():
         develop()
 
 
-
-if __name__ == "__main__":
-    main()
+main()

@@ -50,6 +50,7 @@ class CreateMesh:
         :param point: np.array([x_coord0, y_coord0])
         :return: bool
         """
+
         polygon_path = mpath.Path(self.polygon)
         is_inside = polygon_path.contains_point(point)
 
@@ -64,6 +65,7 @@ class CreateMesh:
         :param point: np.array([x_coord0, y_coord0])
         :return: bool
         """
+
         polygon_path = mpath.Path(polygon)
         is_inside = polygon_path.contains_point(point)
 
@@ -76,6 +78,7 @@ class CreateMesh:
         :param line: np.array([x_coord0, y_coord0], [x_coord1, y_coord1])
         :return: np.array
         """
+
         start_point = line[0]
         end_point = line[1]
         distance = np.linalg.norm(start_point - end_point)
@@ -91,6 +94,7 @@ class CreateMesh:
         Nothing
         :return: np.array
         """
+
         if not np.array_equal(self.polygon[0], self.polygon[-1]):
             raise ValueError(f"First vertice has to be equal to last vertice: {self.polygon[0]} != {self.polygon[-1]}")
 
@@ -134,6 +138,7 @@ class CreateMesh:
                             [x_coord0, y_coord0]]) # Last vertice has to be first vertice!
         :return: np.array([[min_x, min_y], [max_x, max_y]])
         """
+
         x_values = self.polygon[:, 0]
         y_values = self.polygon[:, 1]
         min_x, max_x = np.min(x_values), np.max(x_values)
@@ -148,6 +153,7 @@ class CreateMesh:
         :param rect: np.array([[min_x, min_y], [max_x, max_y]])
         :return: np.array([[x0, y0], [x1, y1], ... ])
         """
+
         if np.any(rect < 0.0):
             raise ValueError(f"All vertices have to be positive!")
         if not np.array_equal(rect[0], np.array([0, 0])):
@@ -189,16 +195,17 @@ class CreateMesh:
         For testing purposes
         :return:
         """
+
         plt.scatter(corners[:, 0], corners[:, 1], c='b', marker='x', label='Corners')
         plt.show()
 
     def check_vertice_outline(self, point: np.array) -> bool:
-        # TODO: if in proximity (tolerance) of corner point of polygon
         """
         Checks if a point is on outline of polyon
         :param point: np.array([x_coord0, y_coord0])
         :return: bool
         """
+
         tolerance = self.density / 2
         point_on_line = False
         for nv, start_point in enumerate(self.polygon[:-1]):
@@ -251,12 +258,13 @@ class CreateMesh:
 
     def show_mesh(self):
         """
-        todo
+
         :param all_points:
         :param polygon_outline_vertices:
         :param triangles:
         :return:
         """
+
         polygon_outline_vertices = np.array(self.polygon_outline_vertices)
         if not self.meshcreated:
             print(f"Run create_mesh() first!")
@@ -272,15 +280,15 @@ class CreateMesh:
             plt.legend()
             plt.title('Mesh generation in Polygon')
 
-            #plt.show()
             return fig, ax
 
 
     def output_mesh_param(self):
         """
-        todo: boundary nodes and lines
+
         :return:
         """
+
         if len(self.all_points) < 1000:
             print("Node Coordinates:")
             for idp, point in enumerate(self.all_points):
@@ -294,9 +302,10 @@ class CreateMesh:
 
     def write_output(self):
         """
-        todo
+
         :return:
         """
+
         output_to_write = ''
         output_to_write += 'Coordinates of nodes\n'
         for idp, point in enumerate(self.all_points):
@@ -309,12 +318,13 @@ class CreateMesh:
 
     def create_mesh(self):
         """
-        todo:
+
         :param polygon:
         :param density:
         :param method:
         :return:
         """
+
         all_points, all_points_numbered, all_outline_vertices_numbered, boundaries_numbered = self.get_seed_polygon()
         polygon_outline_vertices = [elem[1] for elem in all_outline_vertices_numbered]
 

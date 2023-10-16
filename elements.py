@@ -43,7 +43,7 @@ class ElementMatrices:
                                                              x_2 * (y_1 - y_3) + x_1 * (-y_2 + y_3))))
         stiffness_mat = np.array([[val11, val12, val13], [val21, val22, val23], [val31, val32, val33]], dtype=np.single)
 
-        mass_mat = None  # TODO
+        mass_mat = None
 
         return stiffness_mat, mass_mat
 
