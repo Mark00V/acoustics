@@ -65,6 +65,8 @@ LINEWIDTH = 2
 GRIDSPACE = 25  # space between grid
 # Borderwidth (space between window frame and widgets and widgets between widgets, relative to windowsize)
 BORDER_WIDTH = 0.01
+SCALE_FACTOR = 0.01
+
 #################################################
 
 
@@ -175,8 +177,8 @@ class FEMGUI:
         by multiplication with scale_factor
         """
 
-        scale_factor = 0.01
-        polygon_coordinates_transformed = [[scale_factor * elem[0], -1 * scale_factor * (elem[1] - 600)]
+
+        polygon_coordinates_transformed = [[SCALE_FACTOR * elem[0], -1 * SCALE_FACTOR * (elem[1] - 600)]
                                            for elem in self.polygon_coordinates]
         polygon_coordinates_transformed = [[elem[0], 0 if elem[1] == -0 else elem[1]]
                                            for elem in polygon_coordinates_transformed]
@@ -202,7 +204,7 @@ class FEMGUI:
         elased_time = end_time - start_time
 
         self.all_points_numbered, self.all_outline_vertices_numbered, \
-            self.boundaries_numbered, self.triangles = self.mesh.create_mesh()
+            self.boundaries_numbered, self.triangles, self.corner_nodes = self.mesh.create_mesh()
 
         fig, ax = self.mesh.show_mesh()
 
@@ -225,7 +227,7 @@ class FEMGUI:
         canvas = FigureCanvasTkAgg(fig, master=top)
         canvas.get_tk_widget().pack()
         ax.text(polygon_transformed_values_x_max * 0.75, polygon_transformed_values_y_min * 1.00, stats_string,
-                       fontsize=8, ha='left')
+                fontsize=8, ha='left')
 
     def clean_canvas(self, canvas: tk.Canvas):
         """
@@ -254,13 +256,15 @@ class FEMGUI:
         if not self.boundaries_set or not self.mesh:
             warning_window = tk.Toplevel(self.root)
             warning_window.title("Warning")
-            warning_label = tk.Label(warning_window, text="Warning: Create Mesh / set boundary conditions first!", padx=20, pady=20, font=("Arial", 12), foreground='red')
+            warning_label = tk.Label(warning_window, text="Warning: Create Mesh / set boundary conditions first!",
+                                     padx=20, pady=20, font=("Arial", 12), foreground='red')
             warning_label.pack()
 
             return None
 
         self.calcfem = CalcFEM(self.all_points_numbered, self.all_outline_vertices_numbered,
-                               self.boundaries_numbered, self.triangles, self.boundary_values)
+                               self.boundaries_numbered, self.triangles, self.boundary_values,
+                               self.acoustic_source, self.corner_nodes)
         self.calcfem.equation = self.equation
         self.calcfem.freq = float(self.value_freq)
         self.calcfem.c_air = float(self.value_c)
@@ -289,7 +293,7 @@ class FEMGUI:
         canvas = FigureCanvasTkAgg(fig, master=fem_solution_window)
         canvas.get_tk_widget().pack()
         ax.text(polygon_transformed_values_x_max * 0.75, polygon_transformed_values_y_min * 1.00, fem_stats_string,
-                       fontsize=10, ha='left')
+                fontsize=10, ha='left')
 
     def on_canvas_click(self, event: tk.Canvas.bind):
         """
@@ -326,12 +330,14 @@ class FEMGUI:
             y2 = y
             center_point = ((x1 + x2) / 2, (y1 + y2) / 2)
             center_x, center_y = center_point
-            self.canvas.create_oval(center_x - 15, center_y - 15, center_x + 15, center_y + 15, outline="black", fill="white")
+            self.canvas.create_oval(center_x - 15, center_y - 15, center_x + 15, center_y + 15, outline="black",
+                                    fill="white")
             self.canvas.create_text(center_x, center_y, text=boundary_text, fill="blue", font=("Helvetica", 11))
             # point
             p_label_radius = 8
             p_dist = 20
-            self.canvas.create_oval(x1 + p_label_radius, y1 - p_dist - p_label_radius, x1  - p_label_radius, y1 - p_dist + p_label_radius, outline="red", fill="gray")
+            self.canvas.create_oval(x1 + p_label_radius, y1 - p_dist - p_label_radius, x1 - p_label_radius,
+                                    y1 - p_dist + p_label_radius, outline="red", fill="gray")
             self.canvas.create_text(x1, y1 - p_dist, text=point_text, fill="black", font=("Helvetica", 7))
         else:
             boundary_text = f"B-{self.click_counter}"
@@ -348,7 +354,8 @@ class FEMGUI:
             # point
             p_label_radius = 8
             p_dist = 20
-            self.canvas.create_oval(x1 + p_label_radius, y1 - p_dist - p_label_radius, x1  - p_label_radius, y1 - p_dist + p_label_radius, outline="red", fill="gray")
+            self.canvas.create_oval(x1 + p_label_radius + 10, y1 - p_dist - p_label_radius, x1 - p_label_radius + 10,
+                                    y1 - p_dist + p_label_radius, outline="red", fill="gray")
             self.canvas.create_text(x1 + 10, y1 - p_dist, text=point_text, fill="black", font=("Helvetica", 7))
 
         FEMGUI.on_canvas_click.prevpoint = (x, y)
@@ -384,7 +391,9 @@ class FEMGUI:
             selected_boundary = self.boundary_select_var.get()
             selected_boundary = selected_boundary.split('B-')[-1]
             value = self.boundary_value_entry.get()
-            self.boundary_values[int(selected_boundary)] = float(value)
+            selected_boundary_type = self.boundary_type_var.get()
+
+            self.boundary_values[int(selected_boundary)] = [float(value), selected_boundary_type]
 
             input_boundary_str = ''
             for boundary_nbr, value in self.boundary_values.items():
@@ -400,7 +409,9 @@ class FEMGUI:
             selected_point = selected_point.split('P-')[-1]
             value = self.point_value_entry.get()
             value = float(value)
-            self.acoustic_source = (int(selected_point), value) # point number from self.polygon_coordinates
+            self.acoustic_source = (int(selected_point), value)  # point number from self.polygon_coordinates
+
+            self.acoustic_source = [self.corner_nodes[self.acoustic_source[0]], value]
 
         def set_value_mats():
             """
@@ -414,7 +425,6 @@ class FEMGUI:
                 self.value_roh = self.materials_value_entry_roh.get()
                 self.value_freq = self.materials_value_entry_freq.get()
                 self.input_mats_str.set(f"freq={self.value_freq}  c={self.value_c}  roh={self.value_roh}")
-
 
         self.set_boundaries_window = tk.Toplevel(self.root)
         self.set_boundaries_window.geometry(f"{300}x{500}")
@@ -450,7 +460,8 @@ class FEMGUI:
         self.boundary_value_set_label.place(relx=0.1, rely=0.275)
 
         # Apply value for boundaries
-        self.set_value_button = tk.Button(self.set_boundaries_window, text="Set Value", command=set_value, font=("Arial", 12))
+        self.set_value_button = tk.Button(self.set_boundaries_window, text="Set Value", command=set_value,
+                                          font=("Arial", 12))
         self.set_value_button.place(relx=0.6, rely=0.175)
 
         # Get equation type and add material properties
@@ -458,9 +469,6 @@ class FEMGUI:
                          'Helmholtz equation': 'HH'}
         equation_type_selected = self.equations_dropdown_var.get()
         self.equation = equ_type_dict[equation_type_selected]
-
-
-
 
         # acoustic source point
         if self.equation == 'HH':
@@ -474,16 +482,13 @@ class FEMGUI:
 
             self.point_value_entry = tk.Entry(self.set_boundaries_window)
             self.point_value_entry.place(relx=0.1, rely=0.45)
-            self.point_value_button = tk.Button(self.set_boundaries_window, text="Set Value", command=set_value_point, font=("Arial", 12))
+            self.point_value_button = tk.Button(self.set_boundaries_window, text="Set Value", command=set_value_point,
+                                                font=("Arial", 12))
             self.point_value_button.place(relx=0.6, rely=0.45)
-
-
-
-
 
         # Materials
         materials_label = tk.Label(self.set_boundaries_window, text="Materials", font=("Arial", 12))
-        materials_label .place(relx=0.1, rely=0.6)
+        materials_label.place(relx=0.1, rely=0.6)
         if self.equation == 'WLG':
             materials_label_k = tk.Label(self.set_boundaries_window, text="k:", font=("Arial", 12))
             materials_label_k.place(relx=0.1, rely=0.675)
@@ -512,7 +517,7 @@ class FEMGUI:
         self.input_mats_str = tk.StringVar()
         self.input_mats_str.set('None')
         self.mats_value_set_label = tk.Entry(self.set_boundaries_window, textvariable=self.input_mats_str,
-                                                 state='readonly', font=("Arial", 10), width=32)
+                                             state='readonly', font=("Arial", 10), width=32)
         self.mats_value_set_label.place(relx=0.1, rely=0.9)
 
         self.boundaries_set = True
@@ -645,7 +650,8 @@ class FEMGUI:
         dropdown_menu_equations.place(relx=0.7, rely=0.9)
 
         # Set Boundaries button
-        set_boundaries_button = tk.Button(root, text="Boundaries/Materials", command=self.set_boundaries_window, font=("Arial", 13))
+        set_boundaries_button = tk.Button(root, text="Boundaries/Materials", command=self.set_boundaries_window,
+                                          font=("Arial", 13))
         set_boundaries_button.place(relx=0.55, rely=0.9)
 
         # add grid
@@ -673,16 +679,18 @@ def develop():
     density = 0.08
     method = 'uniform'
     polygon_vertices = np.array([[0, 0], [1, 0], [2, 1], [0.5, 0.5], [0, 1], [0, 0]])
-    boundary_values = {1: 1}
+    #boundary_values = {1: [1, 'Dirichlet'], 2: [2, 'Dirichlet'], 3: [1, 'Neumann']}
+    boundary_values = {}
+    acoustic_source = [[2, np.array([4.75, 4.25])], 1.0]
     start_time_mesh = time.time()
     mesh = CreateMesh(polygon_vertices, density, method)
     all_points_numbered, all_outline_vertices_numbered, \
-        boundaries_numbered, triangles = mesh.create_mesh()
+        boundaries_numbered, triangles, corner_nodes = mesh.create_mesh()
     end_time_mesh = time.time()
     mesh.show_mesh()
     start_time_fem = time.time()
     calcfem = CalcFEM(all_points_numbered, all_outline_vertices_numbered,
-                      boundaries_numbered, triangles, boundary_values)
+                      boundaries_numbered, triangles, boundary_values, acoustic_source, corner_nodes)
     calcfem.equation = 'HH'  # WLG for heat equation, 'HH' for Helmholtz equation
     calcfem.freq = 500
     calcfem.calc_fem()
@@ -694,6 +702,7 @@ def develop():
     print(f"Runtime fem calculation: {runtim_fem:.4f}")
     print(f"Number of elements: {len(triangles)}")
     print(f"Number of nodes: {len(all_points_numbered)}")
+
 
 #################################################
 

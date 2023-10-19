@@ -12,7 +12,7 @@ from scipy.sparse import coo_matrix
 class CalcFEM:
 
     def __init__(self, all_points_numbered, all_outline_vertices_numbered,
-                 boundaries_numbered, triangles, boundary_values):
+                 boundaries_numbered, triangles, boundary_values, acoustic_source, corner_nodes):
         """
         Constructor
         :param all_points_numbered:
@@ -27,6 +27,8 @@ class CalcFEM:
         self.boundaries_numbered = boundaries_numbered
         self.triangles = triangles
         self.boundary_values = boundary_values
+        self.acoustic_source = acoustic_source
+        self.corner_nodes = corner_nodes
 
         self.all_points = np.array([elem[1] for elem in all_points_numbered])
         self.polygon_outline_vertices = np.array([elem[1] for elem in all_outline_vertices_numbered])
@@ -42,6 +44,12 @@ class CalcFEM:
         self.freq = 1
         self.c_air = 340
         self.roh_air = 1.21
+
+    def calculate_acoustic_source(self):
+        if self.acoustic_source:
+            omega = self.freq * 2 * math.pi
+            mpsource = 4 * math.pi / self.roh_air * ((2 * self.roh_air * omega) / ((2 * math.pi) ** 2)) ** 0.5
+            self.acoustic_source[-1] = mpsource
 
     def get_counter_clockwise_triangle(self, nodes: List[float]) -> List[float]:
         """
@@ -107,6 +115,13 @@ class CalcFEM:
         """
 
         self.lastvektor = np.zeros(self.maxnode, dtype=np.single)
+        if self.acoustic_source:
+            pos = self.acoustic_source[0][0]
+            value = self.acoustic_source[-1]
+            self.lastvektor[pos] = self.lastvektor[pos] + value
+            print("xxx")
+            print(self.acoustic_source)
+            print(self.lastvektor)
 
     def calc_system_matrices(self):
         """
@@ -296,6 +311,9 @@ class CalcFEM:
 
         return fig, ax
 
+    def create_impedance_matrix(self):
+        ...
+
     def calc_fem(self):
         """
         main method for calculation, calculates elementmatrices, assembly of system matrices,
@@ -306,7 +324,7 @@ class CalcFEM:
         all_diriclet = []
         for boundary_number, boundary_value in self.boundary_values.items():
             this_boundary = self.boundaries_numbered[boundary_number]
-            boundary_node_numbers_value = [(nbr[0], boundary_value) for nbr in this_boundary]
+            boundary_node_numbers_value = [(nbr[0], boundary_value[0]) for nbr in this_boundary if boundary_value[1] == 'Dirichlet']
             all_diriclet += boundary_node_numbers_value
 
         self.calc_elementmatrices()
@@ -315,9 +333,13 @@ class CalcFEM:
         # Test für effizientere Assemblierung
         # self.calc_system_matrices_new()
         ###
+        self.calculate_acoustic_source()
         self.calc_force_vector()
 
-        # Implementing boundary conditions
+        # implement neumann boundary conditions
+        self.create_impedance_matrix()
+
+        # Implementing dirichlet boundary conditions
         sysmatrix_adj, force_vector_adj = self.implement_diriclet(self.sysarray, self.lastvektor, all_diriclet)
         self.sysarray = sysmatrix_adj
         self.lastvektor = force_vector_adj

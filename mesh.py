@@ -38,6 +38,7 @@ class CreateMesh:
         self.polygon_outline_vertices = None
         self.triangles = None
         self.meshcreated = False
+        self.corner_nodes = None
         if not np.array_equal(self.polygon[0], self.polygon[-1]):
             raise ValueError(f"First vertice has to be equal to last vertice: {self.polygon[0]} != {self.polygon[-1]}")
 
@@ -102,13 +103,13 @@ class CreateMesh:
 
         boundaries = list()
         n_point = 0
-        corner_nodes = list()
+        self.corner_nodes = list()
         for nv, start_point in enumerate(self.polygon[:-1]):
             end_point = self.polygon[nv + 1]
             line = np.array([start_point, end_point])
             if nv == 0:
                 outline_vertices = self.create_line_vertices(line)[:-1]
-                corner_nodes.append([n_point, outline_vertices[0]])
+                self.corner_nodes.append([n_point, outline_vertices[0]])
                 boundary_points = list()
                 for vertice in outline_vertices:
                     boundary_points.append([n_point, vertice])
@@ -116,7 +117,7 @@ class CreateMesh:
                 boundaries.append(boundary_points)
             else:
                 this_boundary = self.create_line_vertices(line)[:-1]
-                corner_nodes.append([n_point, this_boundary[0]])
+                self.corner_nodes.append([n_point, this_boundary[0]])
                 boundary_points = list()
                 for vertice in this_boundary:
                     boundary_points.append([n_point, vertice])
@@ -127,8 +128,6 @@ class CreateMesh:
         boundaries_numbered = boundaries
         all_outline_vertices_numbered = [[n_point, outline_vertices[n_point]] for n_point in
                                          range(len(outline_vertices))]
-
-        print(corner_nodes)
 
         return all_outline_vertices_numbered, boundaries_numbered
 
@@ -354,4 +353,4 @@ class CreateMesh:
         self.meshcreated = True
         # self.output_mesh_param() # prints output
 
-        return all_points_numbered, all_outline_vertices_numbered, boundaries_numbered, self.triangles
+        return all_points_numbered, all_outline_vertices_numbered, boundaries_numbered, self.triangles, self.corner_nodes
