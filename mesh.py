@@ -102,11 +102,13 @@ class CreateMesh:
 
         boundaries = list()
         n_point = 0
+        corner_nodes = list()
         for nv, start_point in enumerate(self.polygon[:-1]):
             end_point = self.polygon[nv + 1]
             line = np.array([start_point, end_point])
             if nv == 0:
                 outline_vertices = self.create_line_vertices(line)[:-1]
+                corner_nodes.append([n_point, outline_vertices[0]])
                 boundary_points = list()
                 for vertice in outline_vertices:
                     boundary_points.append([n_point, vertice])
@@ -114,6 +116,7 @@ class CreateMesh:
                 boundaries.append(boundary_points)
             else:
                 this_boundary = self.create_line_vertices(line)[:-1]
+                corner_nodes.append([n_point, this_boundary[0]])
                 boundary_points = list()
                 for vertice in this_boundary:
                     boundary_points.append([n_point, vertice])
@@ -124,6 +127,8 @@ class CreateMesh:
         boundaries_numbered = boundaries
         all_outline_vertices_numbered = [[n_point, outline_vertices[n_point]] for n_point in
                                          range(len(outline_vertices))]
+
+        print(corner_nodes)
 
         return all_outline_vertices_numbered, boundaries_numbered
 

@@ -41,7 +41,7 @@ from mesh import CreateMesh
 
 #################################################
 # True for Development
-DEV = True
+DEV = False
 #################################################
 
 #################################################
@@ -97,6 +97,7 @@ class FEMGUI:
         self.value_c = 1
         self.value_roh = 1
         self.value_freq = 1
+        self.acoustic_source = None
 
     def finish_polygon_coordinates(self):
         """
@@ -122,7 +123,15 @@ class FEMGUI:
         center_x, center_y = center_point
         self.canvas.create_oval(center_x - 15, center_y - 15, center_x + 15, center_y + 15, outline="black",
                                 fill="white")
-        self.canvas.create_text(center_x, center_y, text=boundary_text, fill="blue", font=("Helvetica", 11))
+        self.canvas.create_text(center_x, center_y, text=boundary_text, fill="black", font=("Helvetica", 11))
+
+        # add last point
+        point_text = f"P-{self.click_counter}"
+        p_label_radius = 8
+        p_dist = 20
+        self.canvas.create_oval(x1 + p_label_radius, y1 - p_dist - p_label_radius, x1 - p_label_radius,
+                                y1 - p_dist + p_label_radius, outline="red", fill="gray")
+        self.canvas.create_text(x1, y1 - p_dist, text=point_text, fill="black", font=("Helvetica", 7))
 
     def add_grid(self):
         """
@@ -181,7 +190,6 @@ class FEMGUI:
         Sets the instance variables and performs calculations
         Creates new window for showing mesh
         """
-
         method = self.methods_dropdown_var.get()
         density_un = self.density_slider.get()
         density = 1 / density_un
@@ -195,6 +203,7 @@ class FEMGUI:
 
         self.all_points_numbered, self.all_outline_vertices_numbered, \
             self.boundaries_numbered, self.triangles = self.mesh.create_mesh()
+
         fig, ax = self.mesh.show_mesh()
 
         # create new window
@@ -306,10 +315,11 @@ class FEMGUI:
             self.canvas.create_line(FEMGUI.on_canvas_click.prevpoint[0], FEMGUI.on_canvas_click.prevpoint[1], x, y,
                                     fill="black", width=LINEWIDTH)
 
-        # get centerpoint of line and create text
+        # get centerpoint of line and create boundary text and point text
         if 'prevpoint' in FEMGUI.on_canvas_click.__dict__:
             self.click_counter += 1
             boundary_text = f"B-{self.click_counter}"
+            point_text = f"P-{self.click_counter}"
             x1 = FEMGUI.on_canvas_click.prevpoint[0]
             y1 = FEMGUI.on_canvas_click.prevpoint[1]
             x2 = x
@@ -318,8 +328,14 @@ class FEMGUI:
             center_x, center_y = center_point
             self.canvas.create_oval(center_x - 15, center_y - 15, center_x + 15, center_y + 15, outline="black", fill="white")
             self.canvas.create_text(center_x, center_y, text=boundary_text, fill="blue", font=("Helvetica", 11))
+            # point
+            p_label_radius = 8
+            p_dist = 20
+            self.canvas.create_oval(x1 + p_label_radius, y1 - p_dist - p_label_radius, x1  - p_label_radius, y1 - p_dist + p_label_radius, outline="red", fill="gray")
+            self.canvas.create_text(x1, y1 - p_dist, text=point_text, fill="black", font=("Helvetica", 7))
         else:
             boundary_text = f"B-{self.click_counter}"
+            point_text = f"P-{self.click_counter}"
             x1 = 0
             y1 = 600
             x2 = x
@@ -329,6 +345,11 @@ class FEMGUI:
             self.canvas.create_oval(center_x - 15, center_y - 15, center_x + 15, center_y + 15, outline="black",
                                     fill="white")
             self.canvas.create_text(center_x, center_y, text=boundary_text, fill="blue", font=("Helvetica", 11))
+            # point
+            p_label_radius = 8
+            p_dist = 20
+            self.canvas.create_oval(x1 + p_label_radius, y1 - p_dist - p_label_radius, x1  - p_label_radius, y1 - p_dist + p_label_radius, outline="red", fill="gray")
+            self.canvas.create_text(x1 + 10, y1 - p_dist, text=point_text, fill="black", font=("Helvetica", 7))
 
         FEMGUI.on_canvas_click.prevpoint = (x, y)
 
@@ -370,6 +391,17 @@ class FEMGUI:
                 input_boundary_str += f"{boundary_nbr}: {value} ;"
             self.input_boundary_str.set(input_boundary_str)
 
+        def set_value_point():
+            """
+            If needed select point from polygon definition points for adding acoustic source
+            :return:
+            """
+            selected_point = self.point_select_var.get()
+            selected_point = selected_point.split('P-')[-1]
+            value = self.point_value_entry.get()
+            value = float(value)
+            self.acoustic_source = (int(selected_point), value) # point number from self.polygon_coordinates
+
         def set_value_mats():
             """
             Method for setting material data
@@ -385,41 +417,41 @@ class FEMGUI:
 
 
         self.set_boundaries_window = tk.Toplevel(self.root)
-        self.set_boundaries_window.geometry(f"{300}x{400}")
+        self.set_boundaries_window.geometry(f"{300}x{500}")
 
         # Select boundary
         boundary_select_label = tk.Label(self.set_boundaries_window, text="Select Boundary", font=("Arial", 12))
-        boundary_select_label.place(relx=0.1, rely=0.05)
+        boundary_select_label.place(relx=0.1, rely=0.025)
         boundaries = [f"B-{elem}" for elem in range(len(self.polygon_coordinates) - 1)]
         self.boundary_select_var = tk.StringVar()
         self.boundary_select_var.set(boundaries[0])  # default value
         self.dropdown_boundary_menu = tk.OptionMenu(self.set_boundaries_window, self.boundary_select_var, *boundaries)
-        self.dropdown_boundary_menu.place(relx=0.1, rely=0.1)
+        self.dropdown_boundary_menu.place(relx=0.1, rely=0.075)
 
         # select boundary type Placeholder
         boundary_type_label = tk.Label(self.set_boundaries_window, text="Select Type", font=("Arial", 12))
-        boundary_type_label.place(relx=0.6, rely=0.05)
+        boundary_type_label.place(relx=0.6, rely=0.025)
         types = ['Dirichlet', 'Neumann']
         self.boundary_type_var = tk.StringVar()
         self.boundary_type_var.set(types[0])  # default value
         self.dropdown_boundary_type_menu = tk.OptionMenu(self.set_boundaries_window, self.boundary_type_var, *types)
-        self.dropdown_boundary_type_menu.place(relx=0.6, rely=0.1)
+        self.dropdown_boundary_type_menu.place(relx=0.6, rely=0.075)
 
         # Input value
         boundary_value_label = tk.Label(self.set_boundaries_window, text="Value", font=("Arial", 12))
-        boundary_value_label.place(relx=0.1, rely=0.2)
+        boundary_value_label.place(relx=0.1, rely=0.15)
         self.boundary_value_entry = tk.Entry(self.set_boundaries_window)
-        self.boundary_value_entry.place(relx=0.1, rely=0.3)
+        self.boundary_value_entry.place(relx=0.1, rely=0.2)
 
         self.input_boundary_str = tk.StringVar()
         self.input_boundary_str.set('None')
         self.boundary_value_set_label = tk.Entry(self.set_boundaries_window, textvariable=self.input_boundary_str,
                                                  state='readonly', font=("Arial", 10), width=32)
-        self.boundary_value_set_label.place(relx=0.1, rely=0.4)
+        self.boundary_value_set_label.place(relx=0.1, rely=0.275)
 
         # Apply value for boundaries
         self.set_value_button = tk.Button(self.set_boundaries_window, text="Set Value", command=set_value, font=("Arial", 12))
-        self.set_value_button.place(relx=0.6, rely=0.28)
+        self.set_value_button.place(relx=0.6, rely=0.175)
 
         # Get equation type and add material properties
         equ_type_dict = {'Heat equation': 'WLG',
@@ -427,26 +459,49 @@ class FEMGUI:
         equation_type_selected = self.equations_dropdown_var.get()
         self.equation = equ_type_dict[equation_type_selected]
 
+
+
+
+        # acoustic source point
+        if self.equation == 'HH':
+            point_label = tk.Label(self.set_boundaries_window, text="Acoustic source point", font=("Arial", 12))
+            point_label.place(relx=0.1, rely=0.325)
+            points = [f"P-{elem}" for elem in range(len(self.polygon_coordinates[:-1]))]
+            self.point_select_var = tk.StringVar()
+            self.point_select_var.set(points[0])  # default value
+            self.dropdown_point_menu = tk.OptionMenu(self.set_boundaries_window, self.point_select_var, *points)
+            self.dropdown_point_menu.place(relx=0.1, rely=0.38)
+
+            self.point_value_entry = tk.Entry(self.set_boundaries_window)
+            self.point_value_entry.place(relx=0.1, rely=0.45)
+            self.point_value_button = tk.Button(self.set_boundaries_window, text="Set Value", command=set_value_point, font=("Arial", 12))
+            self.point_value_button.place(relx=0.6, rely=0.45)
+
+
+
+
+
+        # Materials
         materials_label = tk.Label(self.set_boundaries_window, text="Materials", font=("Arial", 12))
-        materials_label .place(relx=0.1, rely=0.5)
+        materials_label .place(relx=0.1, rely=0.6)
         if self.equation == 'WLG':
             materials_label_k = tk.Label(self.set_boundaries_window, text="k:", font=("Arial", 12))
-            materials_label_k.place(relx=0.1, rely=0.6)
+            materials_label_k.place(relx=0.1, rely=0.675)
             self.materials_value_entry_k = tk.Entry(self.set_boundaries_window, width=10)
-            self.materials_value_entry_k.place(relx=0.25, rely=0.6)
+            self.materials_value_entry_k.place(relx=0.25, rely=0.725)
         elif self.equation == 'HH':
             materials_label_c = tk.Label(self.set_boundaries_window, text="c:", font=("Arial", 12))
-            materials_label_c.place(relx=0.1, rely=0.6)
+            materials_label_c.place(relx=0.1, rely=0.675)
             materials_label_roh = tk.Label(self.set_boundaries_window, text="roh:", font=("Arial", 12))
-            materials_label_roh.place(relx=0.1, rely=0.7)
+            materials_label_roh.place(relx=0.1, rely=0.725)
             materials_label_freq = tk.Label(self.set_boundaries_window, text="Freq:", font=("Arial", 12))
-            materials_label_freq.place(relx=0.1, rely=0.8)
+            materials_label_freq.place(relx=0.1, rely=0.795)
             self.materials_value_entry_c = tk.Entry(self.set_boundaries_window, width=10)
-            self.materials_value_entry_c.place(relx=0.25, rely=0.6)
+            self.materials_value_entry_c.place(relx=0.25, rely=0.675)
             self.materials_value_entry_roh = tk.Entry(self.set_boundaries_window, width=10)
-            self.materials_value_entry_roh.place(relx=0.25, rely=0.7)
+            self.materials_value_entry_roh.place(relx=0.25, rely=0.725)
             self.materials_value_entry_freq = tk.Entry(self.set_boundaries_window, width=10)
-            self.materials_value_entry_freq.place(relx=0.25, rely=0.8)
+            self.materials_value_entry_freq.place(relx=0.25, rely=0.795)
 
         # Apply values for materials
         self.set_value_button_mats = tk.Button(self.set_boundaries_window, text="Set Value",
@@ -458,7 +513,7 @@ class FEMGUI:
         self.input_mats_str.set('None')
         self.mats_value_set_label = tk.Entry(self.set_boundaries_window, textvariable=self.input_mats_str,
                                                  state='readonly', font=("Arial", 10), width=32)
-        self.mats_value_set_label.place(relx=0.1, rely=0.875)
+        self.mats_value_set_label.place(relx=0.1, rely=0.9)
 
         self.boundaries_set = True
 
